@@ -1,185 +1,84 @@
 ---
 name: resume-writer
-description: "基于 Modular RAG MCP Server 项目生成定制化简历项目经历。结合项目技术亮点与用户业务场景，按简历编写原则输出高质量项目描述（中英文）。Use when user says '写简历', 'resume', '简历', 'write resume', '项目经历', 'project experience', '简历项目', or asks to generate resume content based on this project."
+description: "Use when writing role-targeted resume project experience, interview talking points, or bilingual wording for Financial Agentic RAG / Modular RAG MCP Server. Triggers: 写简历, 简历, resume, write resume, 项目经历, project experience, 简历项目, 面试项目包装, RAG Engineer, Agent Engineer, Backend Engineer, LLM Application Engineer, Financial AI, full-stack AI roles."
 ---
 
 # Resume Writer
 
-基于"写作原则 + 项目亮点 + 用户画像 = 定制化简历"三角模型生成简历项目经历。
+Write honest, role-targeted resume project experience for Financial Agentic RAG / Modular RAG MCP Server. Keep the output compact, defensible in interviews, and matched to the user's target role.
 
-## 工作流程
+## Core Rule
 
-### Phase 1: 加载知识
+- Do not fabricate production adoption, cloud deployment, authentication, multi-tenant isolation, unsupported model providers, or fake metrics.
+- Do not claim capabilities not supported by the project references or codebase.
+- If real metrics are missing, label numbers as `suggested metrics` and ask the user to confirm or replace them.
+- Prefer specific, defensible engineering decisions over inflated business claims.
 
-1. 读取 [references/resume_principles.md](references/resume_principles.md) — 四段式结构、技术标签、亮点挖掘策略、常见误区
-2. 读取 [references/project_highlights.md](references/project_highlights.md) — 10 大技术亮点（含话术方向和量化角度）
-3. 按需深读 `DEV_SPEC.md` 对应章节或源码补充模块细节
+## Reference Loading
 
-### Phase 2: 用户画像采集
+Always read:
+- `references/resume_principles.md`
+- `references/project_overview.md`
 
-用 `ask_questions` 一次性收集（最多 4 个问题）：
+Read as needed:
+- `references/role_profiles.md` when the user has a target role or wants role packaging.
+- `references/project_highlights.md` when selecting technical bullets.
+- `references/interview_followups.md` when preparing interview follow-up questions or defense wording.
 
-**问题 1 — 目标岗位**（单选）：
-- RAG Engineer / Backend Engineer / MLE / LLM Application Engineer / Agent Engineer / 全栈 AI
-- 决定：技术关键词策略、亮点筛选优先级
+## Workflow
 
-**问题 2 — 业务背景**（自由文本，无预设选项）：
-- **这是生成高质量"背景"段的关键输入，必须主动引导用户详细描述。**
-- 问题文本示例：`简历的"背景"段需要真实业务场景来打动面试官。请描述你的实际工作背景，越具体越好。例如：你的团队做什么业务？日常工作中面临什么信息/知识检索痛点？现有工具为什么不好用？这个系统服务于谁？（如果你不想绑定具体业务，想作为"通用 RAG 基础框架"来展示也可以，请注明。）`
-- 引导示例（展示在问题描述中以启发用户）：
-  - "我们团队做 Windows 平台开发，版本发布信息散落在多个 Wiki 和文档系统，关键词搜索查不准"
-  - "我在法务部门，合同和法规文档量大，律师需要快速定位条款但现有搜索只能精确匹配"
-  - "我做智能客服，客户问题经常涉及产品手册里的细节，客服靠经验回答不稳定"
-- 如用户选择"通用框架"模式：背景段聚焦于"企业级 RAG 框架设计"的技术叙事，弱化具体业务
-- 如用户提供了具体背景：**必须将团队职能、信息源类型、检索痛点、服务对象等细节融入背景段**，使背景段读起来像真实项目经历而非模板套话
-- 决定：背景段落叙事、包装方向、项目名称建议
+### Phase 1: Collect User Inputs
 
-**问题 3 — 技术侧重**（多选）：
-- Hybrid Search / Rerank / MCP 协议 / 可插拔架构 / 多模态 / 可观测性 / 评估体系 / 工程化(TDD) / Agent 扩展 / Skill 驱动全流程
-- **建议默认勾选「Skill 驱动全流程」**：这是本项目区别于其他 RAG 项目的核心差异化亮点，展示 AI 工程化方法论与全生命周期自动化能力，面试官会对此印象深刻
-- 决定：哪 3-5 个亮点写入 bullet points
+Collect only what is needed: target role, business framing, technical emphasis, output format, and real metrics. Ask Chinese users in Chinese by default. If information is incomplete, make reasonable assumptions and clearly mark them as assumptions.
 
-**问题 4 — 特殊要求**（自由文本）：
-- 示例："往 Agent 方向靠""强调系统设计""中英双版本""5 条 bullet 以内""量化指标建议帮我给"
-- 如用户填写了量化指标需求，在 Phase 3 自动建议合理数值
+Do not force a long questionnaire. Useful prompts include:
+- Target role: RAG Engineer, Agent Engineer, Backend Engineer, LLM Application Engineer, Financial AI, or full-stack AI.
+- Business framing: financial research, document intelligence, internal knowledge assistant, compliance/search workflow, or generic platform.
+- Technical emphasis: SQL evidence, Agent planning, verification, retrieval, MCP/local platform, backend architecture, or UI/full stack.
+- Output format: Chinese, English, bilingual, short bullets, full project section, or interview story.
+- Real metrics: document scale, latency, evaluation results, test count, deployment status, or "no real metrics yet".
 
-### Phase 3: 内容生成
+### Phase 2: Select Highlights
 
-#### 3.1 亮点匹配
+Use `role_profiles.md` to choose 4-6 role-aligned highlights. Then use `project_highlights.md` to extract each highlight's technical point, resume wording direction, quantification angle, and honesty boundary.
 
-从 `project_highlights.md` 按岗位筛选 3-5 个亮点：
+Prioritize Financial Agentic RAG identity: financial-domain retrieval, SQL-backed evidence, Agent planning, verification, local MCP/platform details, and modular RAG foundations.
 
-| 岗位方向 | 优先亮点 |
-|---------|---------|
-| RAG Engineer | 亮点1(Hybrid Search) → 3(Ingestion) → 5(多模态) → 7(评估) → 11(Skill 驱动) |
-| Backend / 架构 | 亮点2(可插拔架构) → 9(工程化) → 11(Skill 驱动) → 6(可观测性) → 8(DocumentManager) |
-| Agent Engineer | 亮点10(Agent) → 11(Skill 驱动) → 4(MCP) → 1(Hybrid Search) → 2(可插拔架构) |
-| MLE / LLM App | 亮点1(Hybrid Search) → 3(Ingestion) → 5(多模态) → 11(Skill 驱动) → 2(可插拔架构) |
+### Phase 3: Generate Resume Content
 
-> **注意**：亮点 11（Skill 驱动全流程）是所有岗位方向的通用加分项，展示 AI 工程化思维与全流程自动化能力。无论用户选择哪个岗位方向，当用户勾选了「Skill 驱动全流程」时，必须将亮点 11 纳入最终 bullet points。
+Use the four-part structure from `resume_principles.md`:
 
-用户的"技术侧重"多选结果优先覆盖默认排序。
+`Project Name | Time | Role`
 
-#### 3.2 四段式内容生成
+`Background`
 
-严格遵循 `resume_principles.md` 的**四段式结构**（背景 → 目标 → 过程 → 结果），依次生成四个段落：
+`Goal`
 
-##### 段 1：背景
+`Process` with 4-6 bullets
 
-描述项目所属业务场景、服务对象和核心需求。**必须基于用户在 Q2 提供的真实业务背景来撰写**，而非套用通用模板。
+`Result`
 
-生成策略：
-- **用户提供了具体业务背景时**：将用户描述的团队职能、信息源类型、现有工具痛点、服务对象等细节全部融入，写出 2-3 句"读起来像真实项目"的背景描述。模式：`在[用户的团队/业务]中，[具体信息源]分散于[具体系统]，[具体角色]在[具体场景]中面临[具体痛点]，[现有方案]无法满足[具体需求]。`
-- **用户选择"通用框架"模式时**：聚焦技术叙事，描述为"设计面向企业级场景的通用 RAG 框架"。模式：`针对企业知识库场景中[通用痛点]，设计并实现[系统定位]。`
+`Technical Stack`
 
-具体业务背景示例：
-- *"在 Windows 平台开发团队中，版本发布相关信息（Release Notes、变更日志、补丁公告、兼容性说明等）分散于多个 Wiki、文档仓库和内部系统，工程师排查版本差异或回答客户问题时需跨系统翻找，现有关键词搜索无法理解语义，导致检索效率低、信息遗漏频发。"*
-- *"在某金融机构合规部门，法规文件和内部政策文档不断增长，合规团队面临跨系统文档检索效率低、条款定位困难的问题，传统全文搜索只能精确匹配关键词，无法理解语义近义表达。"*
+Bullet rules:
+- Start with active verbs.
+- Combine technical decision, implementation detail, and impact.
+- Include module names when they make the claim more concrete.
+- Use real metrics, or clearly marked `suggested metrics`.
+- Keep bullets concise and interview-defensible.
 
-通用框架示例：
-- *"针对企业级知识库场景中文档分散、检索精度不足、AI 应用难以接入私有知识的共性痛点，设计并实现了模块化 RAG 检索框架。"*
+### Phase 4: Prepare Interview Defense
 
-##### 段 2：目标
+After the resume draft, provide 5-8 likely interview follow-up questions. Use `interview_followups.md` to select questions that match the chosen highlights, especially around architecture choices, retrieval quality, SQL evidence, Agent planning, verification, local MCP integration, and honesty boundaries.
 
-说明技术目标和改进方向，体现技术判断力。模式：`为解决[问题]，目标构建[系统]，实现[核心能力]，达成[预期效果]。`
+### Phase 5: Iterate
 
-示例：
-- *"目标构建基于 RAG + MCP 协议的智能知识检索系统，实现精准语义检索与 AI Agent 直接调用私有知识库的能力，将文档问答准确率提升至 90% 以上。"*
-- *"设计多模态智能问答系统，支持医学文档与图表的语义检索，将日均查询响应时延控制在 1 秒内。"*
+Ask whether the user wants adjustment toward backend, Agent, financial-domain, shorter wording, English, bilingual wording, or STAR story expansion.
 
-##### 段 3：过程（Bullet Points）
+## Output Guardrails
 
-以 4-6 条 bullet 展示关键技术方案和工程实现，每条遵循 `resume_principles.md` 规则：
-
-1. **动词开头**：设计 / 实现 / 构建 / 优化 / 集成 / 主导
-2. **三段式**：做了什么 → 用了什么技术 → 达成什么效果
-3. **夹带关键词**：从 `resume_principles.md` 技术标签表中选取岗位匹配关键词
-4. **量化收尾**：每条尽量附带数字（文档数 / chunk 数 / 准确率 / 延迟 / 测试数）
-
-##### 段 4：结果
-
-用独立段落总结项目最终成果，集中展示 3-5 个核心量化指标。模式：`系统上线后，[指标 1]，[指标 2]，[指标 3]。`
-
-示例：
-- *"系统上线后，检索准确率（Hit Rate@10）达到 92%，端到端查询延迟控制在 800ms 以内，支撑 5000+ 篇文档的实时语义检索，累计处理查询 XX 万次。"*
-
-#### 3.3 量化指标
-
-如用户提供了具体数字，直接使用。如未提供，基于项目实际能力建议合理值：
-
-| 指标类型 | 建议范围 | 说明 |
-|---------|---------|------|
-| 检索准确率提升 | 15%-30% | Hit Rate@10 or MRR 提升 |
-| 响应延迟 | 500ms-1500ms | 端到端单次查询 |
-| 文档规模 | 1000-50000 篇 | 视业务场景调整 |
-| 测试覆盖 | 1200+ 用例 | 项目实际数据 |
-| 组件支持数 | 4+ LLM Provider | 项目实际数据 |
-| Skill 覆盖度 | 5 大 Skill | 编码/测试/配置/打包/文档全覆盖 |
-| AI 自动完成任务数 | 68 个子任务 | DEV_SPEC 定义的全部任务 |
-| 开发周期压缩 | 2 个月业余时间 | 全流程 Skill 驱动 |
-
-标注"建议值，请根据实际调整"，需用户确认。量化指标须同时出现在**过程段 bullet 尾部**和**结果段汇总**中（结果段为最终汇总，bullet 中为分点展开）。
-
-### Phase 4: 输出格式
-
-严格按四段式结构输出，模板如下：
-
-```
-**[项目名称]** | [时间段] | [角色]
-
-**背景**：[2-3 句描述业务场景、服务对象、面临的问题/需求]
-
-**目标**：[1-2 句说明技术目标、核心能力、预期效果]
-
-**过程**：
-• [Bullet 1：核心架构/检索设计] — 动词开头 + 技术细节 + 效果
-• [Bullet 2：关键技术实现] — 动词开头 + 工具/方法 + 量化
-• [Bullet 3：工程化/可观测性] — 动词开头 + 实践 + 数据
-• [Bullet 4：业务成果/量化指标] — 动词开头 + 指标 + 影响
-• [Bullet 5：可选扩展] — Agent/多模态/评估等
-
-**结果**：[2-3 句汇总核心量化指标：准确率、延迟、规模、测试覆盖等]
-
-**技术栈**：[按权重排列的关键词列表]
-```
-
-约束：
-- 四段（背景/目标/过程/结果）缺一不可
-- 过程段 4-6 条 bullet（除非用户指定）
-- 每条 bullet 不超过 80 字
-- 结果段必须包含至少 3 个量化指标
-- 项目名称默认"智能知识检索与问答系统"（用户可改）
-
-### Phase 5: 迭代与面试准备
-
-1. 展示初稿，询问反馈
-2. 根据反馈调整侧重、措辞、篇幅
-3. **主动提供面试追问预测**（3-5 条），例如：
-   - "BM25 和 Dense 检索的权重怎么调的？RRF 的 k 参数选多少？"
-   - "为什么选 Chroma 不选 Qdrant？什么场景下会切换？"
-   - "Rerank 失败时怎么回退？回退后准确率下降多少？"
-   - "你的 Ingestion Pipeline 如何保证幂等性？"
-   - "MCP 协议相比直接 REST API 有什么优势？"
-4. 如需英文版，提供翻译
-
-## 放大策略
-
-| 维度 | 允许 | 禁止 |
-|------|------|------|
-| 业务场景 | 包装为真实业务落地 | 伪造公司名/产品名 |
-| 量化指标 | 添加合理效果数据 | 脱离项目能力的夸大 |
-| 角色 | "设计并主导实现" | 虚构团队规模 |
-| 技术深度 | 强调决策与判断力 | 编造未实现的功能 |
-| 规模 | 声称支撑 XX 文档/请求 | 不合理的数量级 |
-
-**底线**：不声称使用了项目中未实现的技术（如 CLIP、FAISS），不声称完成了标记为"未来扩展"的功能。
-
-## 反模式检查
-
-输出前检查简历不包含：
-- 泛化描述（"负责大模型相关工作"、"参与 RAG 系统开发"）
-- 工具堆砌（列工具名不解释作用）
-- 缺失量化结果
-- 被动语态（"参与"、"协助"、"了解"）
-- 过长无主线的过程描述
-- 面试中无法自圆其说的声称
+- Check that the project reads as Financial Agentic RAG, not only generic Modular RAG.
+- Include SQL evidence, Agent planning, verification, and local platform details when relevant to the target role.
+- Do not claim direct LLM SQL generation.
+- Clearly mark `suggested metrics` and require user confirmation before treating them as real.
+- Ensure the final wording fits the target role and avoids unsupported claims.
