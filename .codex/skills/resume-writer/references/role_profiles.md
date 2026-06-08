@@ -1,4 +1,4 @@
-# 岗位画像与亮点映射
+﻿# 岗位画像与亮点映射
 
 用于帮助 resume-writer 根据目标岗位选择 Financial Agentic RAG 的技术亮点。每次按岗位最多选择 4-6 个亮点，不必全选。所有亮点编号与名称必须对齐 `project_highlights.md`，不要扩写成虚构的生产 SaaS、多租户、云部署或真实商业指标。
 
@@ -146,3 +146,4 @@ FastAPI, React, Vite, Local Demo, End-to-end AI App, Upload Flow, Chat UI, Sourc
 ### 弱化内容
 
 不要突出大规模生产运维、云部署、多租户、商业化指标或复杂权限体系；不要把本地演示平台包装成生产 Web SaaS。
+

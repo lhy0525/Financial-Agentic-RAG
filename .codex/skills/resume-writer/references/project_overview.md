@@ -1,4 +1,4 @@
-# Financial Agentic RAG 项目总览
+﻿# Financial Agentic RAG 项目总览
 
 ## 当前定位
 
@@ -103,3 +103,4 @@ python scripts/ingest.py --path ... --financial-prospectus
 - 已验证真实商业指标。
 
 简历表述应突出项目真实能力：本地运行、可追溯证据、受控 SQL、招股书检索、MCP 工具化、FastAPI / React 演示闭环。不要夸大为生产商业平台、真实金融投研系统或已获得线上业务指标的产品。
+

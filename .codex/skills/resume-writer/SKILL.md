@@ -88,3 +88,4 @@ Ask whether the user wants adjustment toward backend, Agent, financial-domain, s
 - Do not claim direct LLM SQL generation.
 - Clearly mark `suggested metrics` and require user confirmation before treating them as real.
 - Ensure the final wording fits the target role and avoids unsupported claims.
+
