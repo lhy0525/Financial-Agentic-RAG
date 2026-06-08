@@ -1,0 +1,91 @@
+# Modular RAG MCP Server - Example Configuration
+# Copy this file to config/settings.yaml and fill in local credentials.
+# Do not commit config/settings.yaml.
+
+llm:
+  provider: "openai"  # Options: openai, azure, ollama, deepseek, zhipu
+  model: "gpt-4o-mini"
+  deployment_name: ""
+  azure_endpoint: ""
+  api_version: ""
+  api_key: ""
+  base_url: ""
+  temperature: 0.0
+  max_tokens: 4096
+
+embedding:
+  provider: "openai"  # Options: openai, azure, ollama, zhipu
+  model: "text-embedding-3-small"
+  dimensions: 1536
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
+  api_key: ""
+  base_url: ""
+
+vision_llm:
+  enabled: false
+  provider: "openai"  # Options: openai, azure, ollama, zhipu
+  model: "gpt-4o-mini"
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
+  api_key: ""
+  base_url: ""
+  max_image_size: 2048
+
+vector_store:
+  provider: "chroma"  # Options: chroma, qdrant, pinecone
+  persist_directory: "./data/db/chroma"
+  collection_name: "knowledge_hub"
+
+retrieval:
+  dense_top_k: 20
+  sparse_top_k: 20
+  fusion_top_k: 10
+  rrf_k: 60
+
+rerank:
+  enabled: false
+  provider: "none"  # Options: none, cross_encoder, llm
+  model: ""
+  top_k: 5
+
+evaluation:
+  enabled: false
+  provider: "custom"  # Options: ragas, deepeval, custom
+  metrics:
+    - "hit_rate"
+    - "mrr"
+    - "faithfulness"
+
+observability:
+  log_level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  trace_enabled: true
+  trace_file: "./logs/traces.jsonl"
+  structured_logging: true
+
+financial_platform:
+  # FINANCIAL_DEMO_DB_PATH overrides this value when set.
+  sql_db_path: "./data/financial_demo.sqlite"
+  host: "127.0.0.1"
+  port: 8010
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+  prospectus_enabled: false
+  prospectus_indexing_enabled: true
+  prospectus_collection: "prospectus_uploads"
+  upload_dir: "./data/local_platform_uploads"
+
+ingestion:
+  chunk_size: 1000
+  chunk_overlap: 200
+  splitter: "recursive"  # Options: recursive, semantic, fixed_length
+  batch_size: 100
+
+  chunk_refiner:
+    use_llm: false
+
+  metadata_enricher:
+    use_llm: false

@@ -1,0 +1,137 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.pytest-tmp/
+.pytest-tmp*/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
+.env
+.env.*
+!.env.example
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Local configuration and credentials
+config/settings.yaml
+!config/settings.example.yaml
+config/test_credentials.yaml
+!config/test_credentials.yaml.example
+config/settings.yaml.qa_backup
+config/settings.yaml.bak
+*.local.yaml
+*.local.yml
+*.local.json
+
+# Agent-local settings
+.claude/settings.local.json
+.codex/settings.local.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# Project-specific
+data/
+cache/
+logs/
+*.log
+traces.jsonl
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.bak
+
+# Auto-coder skill cache
+.github/skills/auto-coder/.spec_hash
+
+# Secrets
+.env.local
+.env.*.local
+secrets.yaml
+nonexistent_traces.jsonl/
+
+# Frontend
+node_modules/
+.npm-cache/
+frontend/dist/
+frontend/.npm-cache/
+frontend/*.log
+frontend/.local-platform-frontend.*.log
+frontend/qa-artifacts/
+.gstack-codex/

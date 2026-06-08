@@ -1,0 +1,31 @@
+{
+  "thresholds": {
+    "route_accuracy": 0.8,
+    "sql_safety_accuracy": 1.0,
+    "regression_pass_rate": 1.0
+  },
+  "cases": [
+    {
+      "id": "eval-sql-smoke",
+      "question": "000637 latest Shenwan industry classification",
+      "expected_route": "text_to_sql",
+      "expected_status": "pass",
+      "task_family": "latest-record lookup",
+      "expected_sql": {
+        "safety_passed": true,
+        "execution_success": true
+      },
+      "tags": ["latest"]
+    },
+    {
+      "id": "eval-missing-table-regression",
+      "question": "prospectus table precise revenue value",
+      "expected_route": "pdf_rag",
+      "expected_status": "partial",
+      "task_family": "prospectus table facts",
+      "regression": "missing_raw_table",
+      "expected_regression_status": "partial",
+      "tags": ["missing_raw_table"]
+    }
+  ]
+}

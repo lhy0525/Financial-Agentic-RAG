@@ -1,0 +1,97 @@
+[
+  {
+    "id": "sql_quote_formula_ranking_citic_level1_daily_change_top1",
+    "question": "请帮我计算，在20210105，中信行业分类划分的一级行业为综合金融行业中，涨跌幅最大的股票的股票代码是什么？涨跌幅是多少？百分数保留两位小数。",
+    "expected_route": "text_to_sql",
+    "task_family": "quote_formula",
+    "expected_entities": {
+      "dates": ["20210105"],
+      "industry_standard": "中信行业分类",
+      "level1_industry": "综合金融"
+    },
+    "expected_time_scope": {
+      "kind": "trading_date",
+      "value": "20210105",
+      "date_column": "交易日期"
+    },
+    "expected_formula": "daily_percent_change",
+    "expected_evidence_family": "sql_result",
+    "expected_answer_constraints": {
+      "output_type": "percentage",
+      "precision": 2,
+      "order": "desc",
+      "top_n": 1
+    },
+    "tags": ["formula"]
+  },
+  {
+    "id": "pdf_prospectus_founder_shareholder_disclosure",
+    "question": "湖南长远锂科股份有限公司的发起人法人有哪些？请基于招股说明书披露回答。",
+    "expected_route": "pdf_rag",
+    "task_family": "disclosure_fact",
+    "expected_entities": {
+      "company_names": ["湖南长远锂科股份有限公司"]
+    },
+    "expected_time_scope": {
+      "kind": "not_applicable",
+      "value": null
+    },
+    "expected_evidence_family": "text",
+    "expected_answer_constraints": {
+      "output_type": "text"
+    },
+    "tags": ["alias_resolution"]
+  },
+  {
+    "id": "hybrid_fund_q4_third_holding_return",
+    "question": "我想了解博时研究优选灵活配置混合(LOF)A基金在2021四季度的第3大重仓股，该持仓股票当季度的涨跌幅是多少？",
+    "expected_route": "hybrid",
+    "expected_hybrid_mode": "sql_first",
+    "task_family": "hybrid",
+    "expected_entities": {
+      "fund_names": ["博时研究优选灵活配置混合(LOF)A基金"],
+      "years": ["2021"],
+      "quarters": ["Q4"]
+    },
+    "expected_time_scope": {
+      "kind": "report_period",
+      "value": "2021Q4",
+      "start": "20211001",
+      "end": "20211231",
+      "report_types": ["季报"],
+      "date_column": "持仓日期"
+    },
+    "expected_formula": "daily_percent_change",
+    "expected_evidence_family": "sql_result+text",
+    "expected_answer_constraints": {
+      "output_type": "percentage",
+      "top_n": 3
+    },
+    "expected_sql_subquestion": "Resolve the fund holding stock for the requested report period and rank.",
+    "expected_prospectus_subquestion": "Compute the resolved holding stock return for the requested period.",
+    "expected_entity_mapping": {
+      "mapping": "sql_stock_result_to_prospectus_company_name"
+    },
+    "tags": ["report_period", "formula", "alias_resolution"]
+  },
+  {
+    "id": "sql_latest_shenwan_level2_industry_stock_code",
+    "question": "股票000637在申万行业分类下的二级行业是什么？请使用最新数据。",
+    "expected_route": "text_to_sql",
+    "task_family": "latest_record_lookup",
+    "expected_entities": {
+      "stock_codes": ["000637"],
+      "industry_standard": "申万行业分类"
+    },
+    "expected_time_scope": {
+      "kind": "latest",
+      "value": null,
+      "date_column": "交易日期"
+    },
+    "expected_evidence_family": "sql_result",
+    "expected_answer_constraints": {
+      "output_type": "text"
+    },
+    "tags": ["latest"]
+  }
+]
