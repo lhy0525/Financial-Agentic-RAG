@@ -1,205 +1,298 @@
-# 项目技术亮点清单（Modular RAG MCP Server）
+# Financial Agentic RAG 技术亮点库
 
-> 从 DEV_SPEC 与源码提炼，供简历编写时按需选取。每个亮点附带"简历话术方向"和"可量化角度"。
-
----
-
-## 亮点 1：多阶段混合检索架构（Hybrid Search + Rerank）
-
-**技术要点**：
-- 设计并实现"粗排召回 → 精排重排"两段式检索架构
-- 粗排阶段并行执行 Dense Retrieval（语义向量，Cosine Similarity）+ Sparse Retrieval（BM25 关键词匹配）
-- 通过 RRF（Reciprocal Rank Fusion）算法融合双路结果，平衡查准率与查全率
-- 精排阶段支持 Cross-Encoder 本地模型 / LLM Rerank / None 三种模式可插拔切换
-- 精排失败时自动回退至融合排名（Graceful Fallback），保障系统可用性
-
-**简历话术方向**：
-- "设计并实现了 Hybrid Search 混合检索引擎，结合 BM25 稀疏检索与 Dense Embedding 稠密检索，通过 RRF 融合算法实现查准率与查全率的平衡"
-- "引入 Cross-Encoder Rerank 精排模块，在不牺牲响应速度的前提下将 Top-K 检索精准度提升 XX%"
-
-**可量化角度**：Hit Rate@K、MRR、NDCG、Rerank 前后 Top-1 命中率变化、端到端查询延迟
+用于按岗位方向选择 4-6 个亮点生成简历项目经历；每个亮点包含技术要点、简历话术方向、量化角度、诚实边界。
 
 ---
 
-## 亮点 2：全链路可插拔架构（Factory + 配置驱动）
+## 亮点 1：Modular RAG / MCP 底座
 
-**技术要点**：
-- 为 LLM / Embedding / Splitter / VectorStore / Reranker / Evaluator 六大组件定义统一抽象接口（Base 类）
-- 采用工厂模式（Factory Pattern）+ YAML 配置驱动，实现"改配置不改代码"的组件切换
-- LLM Provider 支持 Azure OpenAI / OpenAI / Ollama / DeepSeek 四种后端
-- Embedding 支持 OpenAI / Azure / Ollama 三种后端
-- 向量数据库接口预留扩展（当前默认 Chroma，可切换 Qdrant/Pinecone）
-- Vision LLM 独立抽象（BaseVisionLLM），支持多模态图像处理
+### 技术要点
 
-**简历话术方向**：
-- "设计了全链路可插拔架构，基于抽象接口 + 工厂模式 + 配置驱动，实现 LLM/Embedding/VectorStore 等 6 大核心组件的零代码热切换"
-- "架构支持 Azure OpenAI、本地 Ollama 等多种 Provider 无缝切换，满足企业合规与成本优化需求"
+- 基于统一类型合同组织 RAG 核心对象，降低模块间耦合。
+- 实现 MCP stdio server，以 JSON-RPC/MCP 方式对外暴露检索能力。
+- 提供 `query_knowledge_hub`、`list_collections`、`get_document_summary` 等工具接口。
+- 将知识库查询能力工具化，便于接入支持 MCP 的 Agent 或本地客户端。
 
-**可量化角度**：支持 N 种 LLM Provider、N 种 Embedding 后端、配置切换零代码修改
+### 简历话术方向
 
----
+设计并实现 Modular RAG / MCP 底座，将私有知识库检索封装为标准 MCP 工具，支持 Agent 通过 JSON-RPC stdio 调用查询、集合列表与文档摘要能力。
 
-## 亮点 3：智能数据摄取流水线（Ingestion Pipeline）
+### 量化角度
 
-**技术要点**：
-- 自研五阶段流水线：Load → Split → Transform → Embed → Upsert
-- PDF 解析采用 MarkItDown 转 canonical Markdown，保留文档结构
-- 使用 LangChain RecursiveCharacterTextSplitter 进行语义感知切分
-- Transform 阶段包含三个 LLM 增强步骤：
-  - ChunkRefiner：LLM 驱动的 Chunk 智能重组与去噪
-  - MetadataEnricher：自动生成 Title/Summary/Tags 语义元数据
-  - ImageCaptioner：Vision LLM 生成图片描述，实现"搜文出图"
-- SHA256 文件哈希 + 内容哈希实现增量摄取与幂等 Upsert
-- 双路向量化：Dense（OpenAI Embedding）+ Sparse（BM25）并行编码
+- MCP 工具数量与覆盖场景
+- 工具调用成功率
+- 单次查询端到端延迟
+- 支持的 collection / document 数量
 
-**简历话术方向**：
-- "设计并实现了五阶段智能数据摄取流水线，整合文档解析、语义切分、LLM 增强（智能重组/元数据注入/图片描述）、双路向量化与幂等存储"
-- "实现基于 SHA256 哈希的增量摄取机制，避免重复处理，降低 API 调用成本 XX%"
+### 诚实边界
 
-**可量化角度**：处理文档数、生成 Chunk 数、增量摄取跳过率、LLM 增强覆盖率、端到端摄取耗时
+不要声称云端生产部署；该亮点主要体现本地 MCP server、协议封装和工具化能力。
 
 ---
 
-## 亮点 4：MCP 协议集成（Model Context Protocol）
+## 亮点 2：Hybrid Search 检索链路
 
-**技术要点**：
-- 遵循 MCP 标准（JSON-RPC 2.0 + Stdio Transport）实现知识检索 Server
-- 暴露 3 个标准 Tool：query_knowledge_hub / list_collections / get_document_summary
-- 支持 GitHub Copilot、Claude Desktop 等主流 MCP Client 即插即用
-- 返回格式支持 TextContent + ImageContent 多模态内容，含结构化 Citation 引用
-- Stdio Transport 零配置、零网络依赖，天然适合私有知识库场景
+### 技术要点
 
-**简历话术方向**：
-- "基于 MCP（Model Context Protocol）标准实现知识检索 Server，支持 GitHub Copilot / Claude Desktop 等 AI Agent 直接调用私有知识库"
-- "实现引用透明的结构化响应（Citation），支持文本 + 图像多模态返回，增强 AI 输出的可信度"
+- 检索链路支持 Dense Retrieval 与 BM25 Sparse Retrieval 双路召回。
+- 使用 RRF 融合稠密向量检索与关键词检索结果，兼顾语义匹配与精确词匹配。
+- 支持可选 rerank，对融合结果进行二阶段排序。
+- 检索或 rerank 失败时提供回退路径，保证基础查询能力可用。
 
-**可量化角度**：支持 N 种 MCP Client、工具调用成功率、端到端响应延迟
+### 简历话术方向
 
----
+实现 Hybrid Search 检索链路，结合 Dense Retrieval、BM25 与 RRF 融合策略，并通过可选 rerank 与失败回退提升本地金融文档查询的鲁棒性。
 
-## 亮点 5：多模态图像处理（Image-to-Text）
+### 量化角度
 
-**技术要点**：
-- 采用 Image-to-Text 策略，复用纯文本 RAG 链路实现多模态检索
-- Loader 阶段自动提取 PDF 图片并插入占位符标记
-- Transform 阶段调用 Vision LLM（GPT-4o）生成结构化图片描述（Caption）
-- 描述文本注入 Chunk 正文，被 Embedding 覆盖后可通过自然语言检索图片
-- 检索命中后动态读取原始图片、编码 Base64 返回 MCP Client
+- Hit Rate@K
+- MRR / NDCG
+- Rerank 前后 Top-K 命中变化
+- Dense、BM25、Hybrid 三种策略对比
+- 查询延迟与失败回退次数
 
-**简历话术方向**：
-- "设计 Image-to-Text 多模态处理方案，利用 Vision LLM 将文档图片转化为语义描述并嵌入检索链路，实现'搜文出图'能力"
-- "无需引入 CLIP 等多模态向量库，复用纯文本 RAG 架构即可支持图像检索，降低架构复杂度"
+### 诚实边界
 
-**可量化角度**：处理图片数、图片描述平均长度、图片相关查询命中率
+没有真实评测数据时，只写可使用 Hit Rate@K、MRR 等指标评估，不编造提升比例或线上效果。
 
 ---
 
-## 亮点 6：全链路可观测性与可视化管理平台
+## 亮点 3：配置驱动 Provider 架构
 
-**技术要点**：
-- 设计双链路追踪体系：Ingestion Trace（5 阶段）+ Query Trace（5 阶段）
-- TraceContext 显式调用模式，低侵入记录各阶段耗时、候选数量、分数分布
-- JSON Lines 结构化日志持久化，零外部依赖（无 LangSmith/LangFuse）
-- 基于 Streamlit 构建六页面管理平台：
-  - 系统总览（组件配置 + 数据资产统计）
-  - 数据浏览器（文档/Chunk/图片详情查看)
-  - Ingestion 管理（文件上传、实时进度条、文档删除）
-  - Ingestion 追踪（阶段耗时瀑布图）
-  - Query 追踪（Dense/Sparse 对比、Rerank 前后变化）
-  - 评估面板（Ragas 指标、历史趋势）
-- Dashboard 基于 Trace 中 method/provider 字段动态渲染，更换组件后自动适配
+### 技术要点
 
-**简历话术方向**：
-- "构建全链路白盒化追踪体系（Ingestion + Query 双链路），每次检索过程透明可回溯，支持精准定位坏 Case"
-- "基于 Streamlit 实现六页面可视化管理平台，涵盖数据浏览、摄取管理、追踪分析、评估面板，实现 RAG 系统的全生命周期管理"
+- 为 LLM、Embedding、VectorStore、Reranker、Evaluator 定义 base interface。
+- 使用 factory 根据配置创建具体 provider，实现组件级可插拔。
+- Prompt 外置管理，便于在不改业务代码的情况下调整模型行为。
+- 支持通过配置切换代码中已实现的模型、向量库、重排与评测组件。
 
-**可量化角度**：追踪覆盖阶段数、Dashboard 页面数、追踪日志条数、问题定位效率提升
+### 简历话术方向
 
----
+设计配置驱动的 Provider 架构，通过 base interface + factory 解耦 LLM、Embedding、VectorStore、Reranker 与 Evaluator，使不同后端能够按配置切换并复用同一条业务链路。
 
-## 亮点 7：自动化评估体系
+### 量化角度
 
-**技术要点**：
-- 可插拔评估框架：Ragas（Faithfulness/Answer Relevancy/Context Precision）+ 自定义指标（Hit Rate/MRR）
-- CompositeEvaluator 支持多评估器并行执行与结果汇总
-- EvalRunner 基于 Golden Test Set 进行回归评估
-- 评估历史持久化，支持策略调整前后的量化对比
-- 评估面板可视化展示指标趋势
+- 已实现 provider 类型数量
+- 配置切换覆盖的组件数
+- 新增 provider 需要修改的文件数
+- Prompt 模板数量与复用场景
 
-**简历话术方向**：
-- "建立基于 Ragas + 自定义指标的自动化评估闭环，拒绝'凭感觉调优'，每次策略调整都有量化分数支撑"
-- "集成 Golden Test Set 回归测试，确保检索质量基线稳定（Hit Rate@K ≥ 90%, MRR ≥ 0.8）"
+### 诚实边界
 
-**可量化角度**：评估指标数、测试集规模、Hit Rate/MRR/Faithfulness 具体数值
+只声称代码支持的 provider；不要声称所有 provider 都经过真实 API 回归或生产级验证。
 
 ---
 
-## 亮点 8：文档生命周期管理（DocumentManager）
+## 亮点 4：Ingestion Pipeline 与本地索引
 
-**技术要点**：
-- DocumentManager 独立于 Pipeline，负责跨 4 个存储的协调操作
-- 支持文档列表、详情查看、协调删除（Chroma + BM25 + ImageStorage + FileIntegrity 四路同步）
-- Pipeline 支持 on_progress 回调，Dashboard 实时展示各阶段进度条
-- 幂等 Upsert 设计：chunk_id = hash(source_path + section_path + content_hash)
+### 技术要点
 
-**简历话术方向**：
-- "实现跨存储协调的文档生命周期管理，支持 Chroma/BM25/图片/处理记录四路同步删除，保障数据一致性"
+- Ingestion pipeline 覆盖 integrity、load、split、transform、embed、upsert 阶段。
+- 使用 SHA256 与 SQLite ingestion history 记录处理历史，支持去重和增量处理。
+- 本地索引包含 Chroma、BM25 与 ImageStorage，支撑文本和图像相关证据管理。
+- 对本地招股书场景支持关闭 transform / image extraction，以降低处理成本。
 
-**可量化角度**：管理文档数、跨存储操作成功率、删除操作耗时
+### 简历话术方向
 
----
+实现面向本地金融文档的 Ingestion Pipeline，串联完整性校验、解析、切分、增强、向量化与入库，并通过 SHA256 + SQLite 历史记录减少重复处理。
 
-## 亮点 9：工程化实践
+### 量化角度
 
-**技术要点**：
-- TDD 开发：1198+ 单元测试 + 30 E2E 测试全绿
-- 9 个开发阶段、68 个子任务全部完成
-- 分层测试金字塔：Unit → Integration → E2E
-- SQLite 轻量持久化（ingestion_history + image_index + BM25 索引），零外部数据库依赖
-- 配置驱动的零代码组件切换
-- Prompt 模板外置（config/prompts/），支持独立迭代
+- 处理文件数与 chunk 数
+- 去重命中次数或跳过率
+- 单文档摄取耗时
+- Chroma / BM25 索引规模
+- transform 与 image extraction 的成本对比
 
-**简历话术方向**：
-- "遵循 TDD 开发范式，累计编写 1200+ 自动化测试用例，覆盖单元/集成/E2E 三层"
-- "采用 SQLite Local-First 持久化方案，零外部数据库依赖，pip install 即可运行"
+### 诚实边界
 
-**可量化角度**：测试用例数、代码覆盖率、开发阶段数、子任务完成率
+主要围绕 PDF/TXT 文档；不要声称支持所有 Office 格式或复杂版式的完整解析。
 
 ---
 
-## 亮点 10：Agent 扩展性（面向 Agent 方向的延伸叙事）
+## 亮点 5：Financial Question Planner
 
-**技术要点**：
-- MCP Server 天然支持 Agent 调用（Tool Calling 范式）
-- 系统可作为知识检索 Agent 嵌入 Multi-Agent 体系
-- 支持构建自定义 Agent Client（ReAct / Chain of Thought 模式）
-- 可快速适配不同业务场景（替换数据源、调整检索策略、定制 Prompt）
+### 技术要点
 
-**简历话术方向**（适用于偏 Agent 方向的岗位）：
-- "基于 MCP 协议构建知识检索 Agent，支持 Tool Calling / ReAct 模式，可嵌入 Multi-Agent 协作系统"
-- "设计通用化知识检索框架，支持快速适配不同业务场景（替换数据源 + 调整检索策略 + 定制 Prompt），作为 Agent 生态的知识中枢"
+- `FinancialQuestionPlanner` 以规则优先方式解析问题中的实体、时间、公式和输出约束。
+- 输出结构化 `QuestionPlan`，为后续工具选择与证据组织提供统一输入。
+- 支持 `pdf_rag`、`text_to_sql`、`hybrid` route，按问题类型选择证据路径。
+- 将金融问答中的规划逻辑显式化，减少后续链路的隐式判断。
 
-**可量化角度**：支持的 Agent Client 数量、业务场景适配数
+### 简历话术方向
+
+实现规则优先的 Financial Question Planner，将自然语言问题解析为包含实体、时间、公式、输出约束和 route 的 `QuestionPlan`，支撑 PDF RAG、Text-to-SQL 与 Hybrid 证据路径编排。
+
+### 量化角度
+
+- 支持的 route 类型数量
+- 可解析的实体、时间、公式模式数量
+- Planner 命中率或回退率
+- 不同问题类型的路由准确率
+
+### 诚实边界
+
+不要写成通用 LLM router；当前是规则优先规划器，重点是金融问答场景下的结构化规划。
 
 ---
 
-## 亮点 11：Skill 驱动全流程开发（AI Agent 自动化工程实践）
+## 亮点 6：规则编译型 Text-to-SQL Evidence Path
 
-**技术要点**：
-- 设计并实现 DEV_SPEC 驱动开发模式：通过结构化开发规格文档（DEV_SPEC.md）定义架构、接口、任务排期，AI Agent 基于 Spec 自动生成符合规格的代码
-- 内置 5 大 Agent Skill 覆盖完整开发生命周期：
-  - **auto-coder**：读取 DEV_SPEC 中的任务定义与架构规范，自动实现代码并运行测试，支持最多 3 轮自动修复
-  - **qa-tester**：基于 QA_TEST_PLAN 自动执行全类型测试（CLI / Dashboard UI / MCP 协议 / Provider 切换），自动诊断并修复失败用例
-  - **setup**：交互式一键配置向导，覆盖 Provider 选择 → API Key → 依赖安装 → 配置生成 → Dashboard 启动，失败自动诊断重试
-  - **package**：一键清理打包，移除缓存/构建产物/敏感信息，生成可分发代码包
-  - **resume-writer**：结合项目亮点与用户画像，自动生成定制化简历项目经历
-- Skill 采用"Markdown 知识文件 + 结构化工作流 + 工具编排"的统一范式，可通过编写新 Skill 文件即时扩展 Agent 能力
-- 实现了"Spec → 拆任务 → AI 写代码 → AI 跑测试 → 自动修复 → 提交"的全自动闭环，人类仅需审查和决策
-- 项目 9 个开发阶段、68 个子任务均通过 Skill 驱动 AI 完成，从立项到交付仅用 2 个月业余时间
+### 技术要点
 
-**简历话术方向**：
-- "设计 DEV_SPEC 驱动的 AI 自动化开发工作流，通过 Agent Skill 编排实现从代码生成、自动测试到修复提交的全流程闭环，68 个子任务全部由 AI 自动完成"
-- "构建 5 大 Agent Skill 体系（auto-coder / qa-tester / setup / package / resume-writer），覆盖编码、测试、配置、打包、文档生成全生命周期，开发效率提升数倍"
-- "将 Skill 设计为'Markdown 知识文件 + 结构化工作流'的标准化范式，支持零代码快速扩展新 Agent 能力，实现可复用的 AI 工程化方法论"
+- `TextToSQLEvidenceTool` 根据 `QuestionPlan` 编译 SELECT SQL，而不是让 LLM 自由生成 SQL。
+- `FinancialSchemaRegistry` 管理金融数据表、字段与可查询结构。
+- `EntityResolver` 将问题中的实体映射到可执行查询条件。
+- 查询结果包装为 `EvidencePackage`，包含 SQL、表、列、行、耗时与 safety metadata。
 
-**可量化角度**：Skill 数量（5 大 Skill）、覆盖任务数（68 个子任务）、自动修复轮次（最多 3 轮）、开发周期压缩（2 个月业余时间完成完整项目）、自动化覆盖率（编码/测试/配置/打包/文档全覆盖）
+### 简历话术方向
+
+实现规则编译型 Text-to-SQL Evidence Path，基于 `QuestionPlan`、金融 schema registry 与实体解析器生成受控 SELECT 查询，并将结果封装为可追溯的证据包。
+
+### 量化角度
+
+- 支持的表与字段数量
+- 可编译的问题模板数量
+- SQL 执行耗时
+- 返回行数、证据包数量
+- route 到 text-to-sql 的命中比例
+
+### 诚实边界
+
+必须写“规则编译型 Text-to-SQL”；不要写“LLM 自动生成 SQL”或暗示模型可任意生成数据库查询。
+
+---
+
+## 亮点 7：SQL Safety 与执行保护
+
+### 技术要点
+
+- `SQLSafetyChecker` 只允许 SELECT 查询进入执行环节。
+- 拦截 INSERT、UPDATE、DELETE、DROP、ALTER、CREATE、PRAGMA 等高风险语句。
+- 拦截多语句、注释、非 SELECT 查询，降低误执行风险。
+- 自动补充或约束 LIMIT，控制本地 demo 查询结果规模。
+
+### 简历话术方向
+
+为 Text-to-SQL 证据路径实现 SELECT-only SQL Safety Guard，拦截写操作、DDL、多语句和注释类输入，并通过自动 LIMIT 控制查询执行范围。
+
+### 量化角度
+
+- 拦截规则数量
+- 安全测试 case 数量
+- 被拒绝 SQL 类型覆盖
+- 自动 LIMIT 生效次数
+- 查询执行耗时与返回行数
+
+### 诚实边界
+
+这是本地 demo 的 SELECT-only safety guard，不是完整数据库安全网关，也不能替代数据库权限、审计和隔离机制。
+
+---
+
+## 亮点 8：Evidence Merger / Financial Verifier
+
+### 技术要点
+
+- Evidence Merger 按 evidence_id 与 source/content 对证据去重。
+- 保留 duplicates、source、package path、trace ids 等追踪信息。
+- Financial Verifier 检查证据缺失、事实冲突、公式一致性、单位与格式。
+- 验证结果使用 pass、partial、conflict、insufficient 等 status 表达可信度。
+
+### 简历话术方向
+
+构建 Evidence Merger 与 Financial Verifier，对多路径证据进行去重、溯源和一致性校验，用 pass / partial / conflict / insufficient 状态增强金融问答结果的可解释性。
+
+### 量化角度
+
+- 合并前后证据数量
+- 去重命中数量
+- 冲突或证据不足 case 数量
+- verifier 规则数量
+- trace 覆盖率
+
+### 诚实边界
+
+不要声称完全消除幻觉；应表述为降低幻觉风险、增强证据可追溯与结果校验能力。
+
+---
+
+## 亮点 9：Prospectus Evidence 与上传索引
+
+### 技术要点
+
+- 支持 PDF/TXT 招股书上传、本地保存、解析并索引到 Chroma / BM25。
+- `LocalProspectusIndexService` 返回 `indexed_searchable`、`already_indexed`、`index_failed` 等 readiness 状态。
+- `ProspectusEvidenceTool` 将招股书检索结果包装为 text / table evidence。
+- 将上传、索引 readiness 与证据检索拆开，避免把文件保存误判为可检索。
+
+### 简历话术方向
+
+实现招股书上传索引与证据抽取能力，将本地 PDF/TXT 招股书解析后写入 Chroma / BM25，并通过 readiness 状态区分已上传、已索引和可检索。
+
+### 量化角度
+
+- 上传文件数
+- indexed_searchable / already_indexed / index_failed 分布
+- 索引耗时
+- 文本证据与表格证据数量
+- 招股书查询命中率
+
+### 诚实边界
+
+上传成功不等于检索可用；简历中必须强调 readiness 状态，不能把保存成功夸大为索引和检索都成功。
+
+---
+
+## 亮点 10：FastAPI + React 本地演示平台
+
+### 技术要点
+
+- `src/local_platform/api.py` 提供 health、chat、upload、history 等本地 API。
+- `service.py` 懒创建 Orchestrator，减少启动时对完整链路的强依赖。
+- API 返回 SQL / prospectus 状态，便于前端展示证据路径健康度。
+- `frontend/src/App.jsx` 实现本地无登录 React / Vite UI。
+- 前端展示 sources、plan、verification、trace 等调试信息。
+
+### 简历话术方向
+
+搭建 FastAPI + React 本地演示平台，提供 health、chat、upload、history API 与无登录 Vite UI，将 sources、plan、verification 和 trace 可视化呈现给调试与演示使用者。
+
+### 量化角度
+
+- API endpoint 数量
+- 前端展示的信息模块数量
+- 本地启动耗时
+- chat / upload 请求耗时
+- 演示流程覆盖的证据路径数量
+
+### 诚实边界
+
+这是本地演示平台，不是生产 Web SaaS，也不是完整权限系统；不要声称具备企业级鉴权、租户隔离或线上运维能力。
+
+---
+
+## 亮点 11：金融评测与边界用例
+
+### 技术要点
+
+- `FinancialEvalRunner` 针对 agent 输出评估 route、verification、source、tool sequence。
+- 通过 financial fixtures / golden cases 覆盖典型金融问答与边界用例。
+- 通用 EvalRunner 支持 Hit Rate、MRR 等检索指标。
+- 将离线评测与回归测试结合，用于约束规划、检索、SQL 与验证链路变化。
+
+### 简历话术方向
+
+建设金融问答离线评测与回归测试体系，使用 `FinancialEvalRunner` 检查 route、verification、source 和 tool sequence，并结合 golden cases 约束核心链路迭代质量。
+
+### 量化角度
+
+- Golden case 数量
+- 覆盖的问题类型数量
+- route / verification / source / tool sequence 通过率
+- Hit Rate@K、MRR
+- 回归测试执行耗时与失败 case 数量
+
+### 诚实边界
+
+没有真实线上业务反馈时，只写离线评测和回归测试；不要声称线上收益、真实用户反馈或生产 A/B 实验结果。
