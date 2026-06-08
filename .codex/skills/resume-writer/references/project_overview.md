@@ -4,7 +4,7 @@
 
 Financial Agentic RAG 是一个本地优先的金融问答与知识检索项目。它不是单纯的通用 RAG demo，而是在通用 RAG / MCP 底座之上，增加了金融问题规划、结构化 SQL 证据、招股书文档证据、证据合并与校验等 Agentic 层能力。
 
-项目当前更适合被理解为：面向简历、演示和本地验证的 Financial Agentic RAG 系统原型。它支持从用户金融问题出发，自动规划查询路线，优先使用结构化金融数据库生成可追溯 SQL Evidence，并在需要时结合招股书 TXT/PDF 检索证据，最终输出带 sources、plan、verification、trace 的答案。
+项目当前更适合被理解为：面向简历、演示和本地验证的 Financial Agentic RAG 系统原型。它支持从用户金融问题出发，规则优先生成结构化查询计划，优先使用结构化金融数据库生成可追溯 SQL Evidence，并在需要时结合招股书 TXT/PDF 检索证据，最终输出带 sources、plan、verification、trace 的答案。
 
 ## 核心链路
 
