@@ -1,5 +1,14 @@
 # 简历项目面试追问准备
 
+## 亮点到追问映射
+
+resume-writer 生成简历后，可根据简历中选中的项目亮点挑 2-5 个追问，优先覆盖最容易被面试官继续深挖的能力点：
+- Agent / Planner：问题 1、4、8。
+- Text-to-SQL / SQL Safety：问题 2、3、10。
+- EvidencePackage / Verifier：问题 5、6、8。
+- Prospectus upload / readiness：问题 7。
+- Production boundary / metrics：问题 9、10。
+
 ## 为什么 Router / Planner 放在 Agent 层，而不是 MCP Server？
 
 回答方向：
@@ -54,7 +63,9 @@
 回答方向：
 - 上传成功不等于检索可用，只能说明文件保存或接收成功。
 - 可能出现保存成功但解析失败，或者解析成功但 embedding / index 构建不可用。
+- readiness 是一个设计决策，用来聚合 upload、parse、index、searchable 这些状态。
 - indexed 表示内容已经进入索引流程，searchable 表示后续检索工具实际能查到。
+- readiness 能避免前端或 Agent 在检索还没准备好时，继续假设证据已经可用。
 - 这个状态能让用户和系统区分“文件已上传”和“证据可用于回答”，减少静默失败。
 
 ## 这个项目和普通 RAG Demo 的区别是什么？
@@ -63,7 +74,7 @@
 - 不只是文档向量检索，还引入结构化 SQL evidence，用数据库事实补充文档证据。
 - 有 question plan，把复杂金融问题拆成可执行的 sub_questions 和证据路径。
 - 输出 sources、verification report 和 trace，让回答有来源、有校验、有链路。
-- 加入金融规则、实体解析、SQL Safety 和 golden boundary evaluation，强调可防守性。
+- 加入金融规则、实体解析、SQL Safety 和 golden boundary evaluation，用边界问题验证 planner / verifier 不乱答，强调可防守性。
 - 保留 MCP 工具能力，使检索、SQL、上传状态等能力能被不同 Agent 或客户端复用。
 
 ## 这个项目离生产系统还差什么？
