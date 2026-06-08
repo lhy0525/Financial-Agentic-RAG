@@ -75,7 +75,7 @@ Bullet rules:
 
 ### Phase 4: Prepare Interview Defense
 
-After the resume draft, provide 5-8 likely interview follow-up questions. Use `interview_followups.md` to select questions that match the chosen highlights, especially around architecture choices, retrieval quality, SQL evidence, Agent planning, verification, local MCP integration, and honesty boundaries.
+For full project entries or when the user asks for interview prep, provide 5-8 likely interview follow-up questions. For small rewrite, shortening, translation, or interview-not-needed requests, skip this phase unless requested. Use `interview_followups.md` to select questions that match the chosen highlights, especially around architecture choices, retrieval quality, SQL evidence, Agent planning, verification, local MCP integration, and honesty boundaries.
 
 ### Phase 5: Iterate
 
