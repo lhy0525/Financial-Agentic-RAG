@@ -54,9 +54,9 @@
 
 - **RAG**：Retrieval-Augmented Generation、向量/关键词检索、文档切分、证据合并、引用追踪、可追溯来源、招股书 PDF/TXT 上传与索引。
 - **Agent**：工具调用、任务编排、MCP 标准工具服务、多步骤推理、证据校验、结果约束。
-- **Backend**：Python、FastAPI、SQL、SQLite/PostgreSQL、REST API、配置管理、测试与日志。
+- **Backend**：Python、FastAPI、SQL、SQLite、本地数据访问、REST API、配置管理、测试与日志。
 - **Financial AI**：本地优先金融问答、财务指标查询、招股书分析、结构化财务数据、SQL-first evidence path。
-- **Frontend Demo**：Streamlit/React、问答界面、文件上传、检索证据展示、配置向导、结果可视化。
+- **Frontend Demo**：React/Vite 本地平台；Streamlit Dashboard（如用于观测面板时再写）、问答界面、文件上传、检索证据展示、配置向导、结果可视化。
 
 ## 5. 诚实包装边界
 
@@ -87,6 +87,6 @@
 - 是否包含背景 -> 目标 -> 过程 -> 结果。
 - bullet 是否以主动动词开头。
 - 是否明确个人贡献，而不是只写团队成果。
-- 是否至少包含 3 个量化点或建议量化点。
+- 是否优先包含 2-3 个真实量化点；无真实数据时是否只列建议指标并要求用户确认。
 - 是否没有虚构生产 SaaS、认证、多租户、云部署等能力。
 - 技术栏是否匹配目标岗位，且只包含项目中真实使用或可解释的技术。
