@@ -1,6 +1,6 @@
 ---
 name: resume-writer
-description: "Use when writing role-targeted resume project experience, interview talking points, or bilingual wording for Financial Agentic RAG / Modular RAG MCP Server. Triggers: 写简历, 简历, resume, write resume, 项目经历, project experience, 简历项目, 面试项目包装, RAG Engineer, Agent Engineer, Backend Engineer, LLM Application Engineer, Financial AI, full-stack AI roles."
+description: "Use when writing role-targeted resume project experience, interview talking points, or bilingual wording for Financial Agentic RAG / Modular RAG MCP Server; triggers include Chinese resume-writing requests, resume, write resume, project experience, interview project packaging, RAG Engineer, Agent Engineer, Backend Engineer, LLM Application Engineer, Financial AI, and full-stack AI roles."
 ---
 
 # Resume Writer
@@ -16,9 +16,11 @@ Write honest, role-targeted resume project experience for Financial Agentic RAG 
 
 ## Reference Loading
 
-Always read:
+For new or full project resume generation, read:
 - `references/resume_principles.md`
 - `references/project_overview.md`
+
+For small requests such as rewriting, shortening, or translating an existing bullet, read only the user-provided text plus `references/resume_principles.md`. Load project references only when factual project details are needed.
 
 Read as needed:
 - `references/role_profiles.md` when the user has a target role or wants role packaging.
@@ -31,6 +33,8 @@ Read as needed:
 
 Collect only what is needed: target role, business framing, technical emphasis, output format, and real metrics. Ask Chinese users in Chinese by default. If information is incomplete, make reasonable assumptions and clearly mark them as assumptions.
 
+For small requests such as "rewrite this bullet", "shorten", or "translate to English", preserve the requested scope. Do not force a full project section or interview follow-ups unless the user asks for them.
+
 Do not force a long questionnaire. Useful prompts include:
 - Target role: RAG Engineer, Agent Engineer, Backend Engineer, LLM Application Engineer, Financial AI, or full-stack AI.
 - Business framing: financial research, document intelligence, internal knowledge assistant, compliance/search workflow, or generic platform.
@@ -40,11 +44,13 @@ Do not force a long questionnaire. Useful prompts include:
 
 ### Phase 2: Select Highlights
 
-Use `role_profiles.md` to choose 4-6 role-aligned highlights. Then use `project_highlights.md` to extract each highlight's technical point, resume wording direction, quantification angle, and honesty boundary.
+If role-targeting is requested, use `role_profiles.md` to choose 4-6 role-aligned highlights. Then use `project_highlights.md` to extract each highlight's technical point, resume wording direction, quantification angle, and honesty boundary.
 
 Prioritize Financial Agentic RAG identity: financial-domain retrieval, SQL-backed evidence, Agent planning, verification, local MCP/platform details, and modular RAG foundations.
 
 ### Phase 3: Generate Resume Content
+
+Adapt the structure to the requested format; use the full structure for full project entries, and smaller scoped output for bullet rewrites, translations, or interview-only requests.
 
 Use the four-part structure from `resume_principles.md`:
 
