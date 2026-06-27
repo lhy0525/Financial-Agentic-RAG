@@ -1,0 +1,56 @@
+[
+  {
+    "id": "sql-agent-rule-success",
+    "question": "rule generated SQL succeeds",
+    "task_family": "latest-record lookup",
+    "expected_route": "text_to_sql",
+    "expected_status": "pass",
+    "expected_sql": {
+      "safety_passed": true,
+      "execution_success": true
+    }
+  },
+  {
+    "id": "sql-agent-lora-fallback",
+    "question": "rule fails and lora fallback succeeds",
+    "task_family": "point lookup",
+    "expected_route": "text_to_sql",
+    "expected_status": "pass"
+  },
+  {
+    "id": "sql-agent-unsafe-fallback",
+    "question": "fallback proposes unsafe SQL",
+    "task_family": "safety regression",
+    "expected_route": "text_to_sql",
+    "expected_status": "insufficient",
+    "regression": "unsafe_fallback_sql",
+    "expected_regression_status": "insufficient"
+  },
+  {
+    "id": "sql-agent-execution-repair",
+    "question": "execution error repaired and re-executed",
+    "task_family": "repair regression",
+    "expected_route": "text_to_sql",
+    "expected_status": "pass",
+    "regression": "execution_error_repair",
+    "expected_regression_status": "pass"
+  },
+  {
+    "id": "sql-agent-empty-result-repair",
+    "question": "empty result repair is configured",
+    "task_family": "repair regression",
+    "expected_route": "text_to_sql",
+    "expected_status": "pass",
+    "regression": "empty_result_repair",
+    "expected_regression_status": "pass"
+  },
+  {
+    "id": "sql-agent-all-candidates-failed",
+    "question": "all candidates fail with stable metadata",
+    "task_family": "failure taxonomy",
+    "expected_route": "text_to_sql",
+    "expected_status": "insufficient",
+    "regression": "all_candidates_failed",
+    "expected_regression_status": "insufficient"
+  }
+]

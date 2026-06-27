@@ -109,3 +109,36 @@ def test_platform_config_reads_prospectus_collection_and_indexing_flag(tmp_path,
     assert config.prospectus_collection == "local_prospectus"
     assert config.prospectus_indexing_enabled is False
     assert config.settings_path == settings_file
+
+
+def test_platform_config_reads_text2sql_agent_flags(tmp_path, monkeypatch):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        "financial_platform:\n"
+        "  text2sql_agent:\n"
+        "    enable_lora_fallback: true\n"
+        "    lora_endpoint: http://127.0.0.1:8888/SQL\n"
+        "    enable_api_fallback: true\n"
+        "    api_model: qwen-plus\n"
+        "    api_endpoint: http://127.0.0.1:9999/v1/sql\n"
+        "    api_key: test-key\n"
+        "    sql_examples_path: examples/sql.json\n"
+        "    sql_examples_top_k: 3\n"
+        "    enable_empty_result_repair: true\n"
+        "    max_repair_attempts: 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("FINANCIAL_DEMO_DB_PATH", raising=False)
+
+    config = resolve_platform_config(settings_path=settings_file)
+
+    assert config.text2sql_agent.enable_lora_fallback is True
+    assert config.text2sql_agent.lora_endpoint == "http://127.0.0.1:8888/SQL"
+    assert config.text2sql_agent.enable_api_fallback is True
+    assert config.text2sql_agent.api_model == "qwen-plus"
+    assert config.text2sql_agent.api_endpoint == "http://127.0.0.1:9999/v1/sql"
+    assert config.text2sql_agent.api_key == "test-key"
+    assert config.text2sql_agent.sql_examples_path == settings_file.parent / "examples" / "sql.json"
+    assert config.text2sql_agent.sql_examples_top_k == 3
+    assert config.text2sql_agent.enable_empty_result_repair is True
+    assert config.text2sql_agent.max_repair_attempts == 2

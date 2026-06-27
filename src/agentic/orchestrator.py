@@ -116,7 +116,18 @@ class FinancialOrchestrator:
         if self.sql_tool is None:
             return EvidencePackage("text_to_sql", question, [])
         package = self.sql_tool.query(self._sql_step_plan(plan), question)
-        trace["stages"].append({"stage": "sql_evidence", "question": question, "evidence_count": len(package.evidences)})
+        stage = {"stage": "sql_evidence", "question": question, "evidence_count": len(package.evidences)}
+        for key in (
+            "sql_source",
+            "accepted_result_kind",
+            "final_failure_code",
+            "repair_attempts",
+            "fallback_attempts",
+            "sql_route_events",
+        ):
+            if key in package.metadata:
+                stage[key] = package.metadata[key]
+        trace["stages"].append(stage)
         return package
 
     def _sql_step_plan(self, plan: QuestionPlan) -> QuestionPlan:

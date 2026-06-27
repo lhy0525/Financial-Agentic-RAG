@@ -216,7 +216,10 @@ class LocalFinancialPlatformService:
         prospectus_tool = self._build_prospectus_tool()
         self._orchestrator = FinancialOrchestrator(
             planner=FinancialQuestionPlanner(),
-            sql_tool=TextToSQLEvidenceTool(self.config.sql_db_path),
+            sql_tool=TextToSQLEvidenceTool(
+                self.config.sql_db_path,
+                agent_config=self.config.text2sql_agent,
+            ),
             prospectus_tool=prospectus_tool,
         )
         self._orchestrator_has_prospectus_tool = prospectus_tool is not None

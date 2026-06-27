@@ -657,7 +657,7 @@ SQL sub-question
   ↓
 Schema Linking
   ↓
-SQL Generation
+SQL Generation / Candidate Route
   ↓
 SQL Safety Check
   ↓
@@ -689,6 +689,25 @@ SQL EvidencePackage
 - 默认添加 `LIMIT`，聚合查询除外。
 - SQL 执行失败时进入 repair，最多重试 2 次。
 - 返回行数超过阈值时，先返回摘要和前 N 行。
+
+当前 Text2SQL Agent 路线采用可观测候选链：
+
+```text
+rule/lora/api -> safety -> execute error -> repair -> re-execute -> log/eval
+```
+
+落地规则：
+
+- `rule` 始终先执行，保持原有规则编译路径为默认能力。
+- `lora` 只有在 `financial_platform.text2sql_agent.enable_lora_fallback` 开启并配置本地 HTTP endpoint 后才参与。
+- `api` fallback 默认关闭，只有显式配置 `enable_api_fallback`、`api_endpoint` 和 `api_model` 后才参与。
+- `sql_examples_path` 支持提供 `{question, sql}` JSON 样例，Text2SQL route 会用轻量关键词匹配取 top-K 样例加入 LoRA/API/repair context。
+- 每个候选都必须先过 `SQLSafetyChecker`，再进入 SQLite executor。
+- 结果为空默认是可接受终止结果；只有开启 empty-result repair 时才继续 fallback/repair。
+- repair source 受 `max_repair_attempts` 约束，修复 SQL 会重新经过 safety 和 execution，并在失败时保留 `repair_exhausted` 等稳定失败码。
+- SQL query log 记录 source、attempt id、parent attempt id、repair reason、safety/execution status、selected flag、row count、error、elapsed time。
+- SQL evidence 和 orchestrator trace 保留 `sql_source`、`fallback_attempts`、`repair_attempts`、`candidate_count`、`selected_reason`、`sql_route_events`、`final_failure_code`、`accepted_result_kind`。
+- 评测层按 `rule/lora/api/repair` 输出 source breakdown、fallback lift、repair metrics，并用 promotion gates 控制 LoRA/API 是否可以成为默认 fallback。
 
 ### 6.4 Hybrid Query Flow
 

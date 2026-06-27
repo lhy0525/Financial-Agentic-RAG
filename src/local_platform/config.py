@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from src.core.settings import DEFAULT_SETTINGS_PATH
+from src.financial_sql.agent_types import TextToSQLAgentConfig
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class PlatformConfig:
     prospectus_indexing_enabled: bool = True
     prospectus_collection: str = "prospectus_uploads"
     settings_path: Path | None = None
+    text2sql_agent: TextToSQLAgentConfig = field(default_factory=TextToSQLAgentConfig)
 
 
 def resolve_platform_config(settings_path: str | Path | None = None) -> PlatformConfig:
@@ -59,6 +61,7 @@ def resolve_platform_config(settings_path: str | Path | None = None) -> Platform
     prospectus_collection = str(platform.get("prospectus_collection") or "prospectus_uploads").strip()
     if not prospectus_collection:
         prospectus_collection = "prospectus_uploads"
+    text2sql_agent = _resolve_text2sql_agent_config(platform.get("text2sql_agent"), settings_file)
 
     diagnostics: dict[str, Any] = {
         "missing": [],
@@ -83,6 +86,7 @@ def resolve_platform_config(settings_path: str | Path | None = None) -> Platform
         prospectus_indexing_enabled=bool(platform.get("prospectus_indexing_enabled", True)),
         prospectus_collection=prospectus_collection,
         settings_path=settings_file,
+        text2sql_agent=text2sql_agent,
     )
 
 
@@ -111,3 +115,61 @@ def _resolve_upload_dir(raw_path: Any, settings_file: Path) -> Path:
     if path.is_absolute():
         return path
     return (settings_file.parent / path).resolve()
+
+
+def _resolve_text2sql_agent_config(raw_config: Any, settings_file: Path) -> TextToSQLAgentConfig:
+    if not isinstance(raw_config, dict):
+        raw_config = {}
+    return TextToSQLAgentConfig(
+        enable_lora_fallback=_as_bool(raw_config.get("enable_lora_fallback"), default=False),
+        lora_endpoint=_as_optional_str(raw_config.get("lora_endpoint")),
+        enable_api_fallback=_as_bool(raw_config.get("enable_api_fallback"), default=False),
+        api_model=_as_optional_str(raw_config.get("api_model")),
+        api_endpoint=_as_optional_str(raw_config.get("api_endpoint")),
+        api_key=_as_optional_str(raw_config.get("api_key")),
+        sql_examples_path=_resolve_optional_path(raw_config.get("sql_examples_path"), settings_file),
+        sql_examples_top_k=_as_int(raw_config.get("sql_examples_top_k"), default=3, minimum=0),
+        enable_empty_result_repair=_as_bool(raw_config.get("enable_empty_result_repair"), default=False),
+        max_repair_attempts=_as_int(raw_config.get("max_repair_attempts"), default=2, minimum=0),
+    )
+
+
+def _resolve_optional_path(raw_path: Any, settings_file: Path) -> Path | None:
+    text = _as_optional_str(raw_path)
+    if not text:
+        return None
+    path = Path(text)
+    if path.is_absolute():
+        return path
+    return (settings_file.parent / path).resolve()
+
+
+def _as_bool(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _as_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _as_int(value: Any, *, default: int, minimum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    return parsed

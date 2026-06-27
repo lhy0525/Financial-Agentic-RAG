@@ -35,7 +35,12 @@ class SQLiteQueryExecutor:
         self.timeout_seconds = timeout_seconds
         self.log_db_path = Path(log_db_path) if log_db_path is not None else None
 
-    def execute(self, sql: str, question: str | None = None) -> SQLExecutionResult:
+    def execute(
+        self,
+        sql: str,
+        question: str | None = None,
+        attempt_context: dict[str, Any] | None = None,
+    ) -> SQLExecutionResult:
         started = time.perf_counter()
         try:
             with sqlite3.connect(self.db_path, timeout=self.timeout_seconds) as con:
@@ -64,32 +69,44 @@ class SQLiteQueryExecutor:
                 error=str(exc),
                 db_path=str(self.db_path),
             )
-        self._log(question=question, result=result)
+        self._log(question=question, result=result, attempt_context=attempt_context)
         return result
 
-    def _log(self, question: str | None, result: SQLExecutionResult) -> None:
+    def _log(
+        self,
+        question: str | None,
+        result: SQLExecutionResult,
+        attempt_context: dict[str, Any] | None = None,
+    ) -> None:
         if self.log_db_path is None:
             return
         with sqlite3.connect(self.log_db_path) as con:
-            con.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sql_query_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    question TEXT,
-                    sql TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    error TEXT,
-                    row_count INTEGER NOT NULL,
-                    elapsed_ms REAL NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
+            self._ensure_log_schema(con)
+            attempt_context = attempt_context or {}
+            selected = bool(attempt_context.get("selected"))
+            selected_statuses = set(attempt_context.get("selected_statuses") or [])
+            if result.status in selected_statuses:
+                selected = True
             con.execute(
                 """
                 INSERT INTO sql_query_log
-                    (question, sql, status, error, row_count, elapsed_ms)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (
+                        question,
+                        sql,
+                        status,
+                        error,
+                        row_count,
+                        elapsed_ms,
+                        source,
+                        attempt_id,
+                        parent_attempt_id,
+                        failure_code,
+                        repair_reason,
+                        safety_status,
+                        execution_status,
+                        selected
+                    )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     question,
@@ -98,6 +115,52 @@ class SQLiteQueryExecutor:
                     result.error,
                     result.row_count,
                     result.elapsed_ms,
+                    attempt_context.get("source"),
+                    attempt_context.get("attempt_id"),
+                    attempt_context.get("parent_attempt_id"),
+                    attempt_context.get("failure_code"),
+                    attempt_context.get("repair_reason"),
+                    attempt_context.get("safety_status"),
+                    attempt_context.get("execution_status") or result.status,
+                    1 if selected else 0,
                 ),
             )
             con.commit()
+
+    def _ensure_log_schema(self, con: sqlite3.Connection) -> None:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sql_query_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question TEXT,
+                sql TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error TEXT,
+                row_count INTEGER NOT NULL,
+                elapsed_ms REAL NOT NULL,
+                source TEXT,
+                attempt_id TEXT,
+                parent_attempt_id TEXT,
+                failure_code TEXT,
+                repair_reason TEXT,
+                safety_status TEXT,
+                execution_status TEXT,
+                selected INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        existing = {row[1] for row in con.execute("PRAGMA table_info(sql_query_log)").fetchall()}
+        additions = {
+            "source": "TEXT",
+            "attempt_id": "TEXT",
+            "parent_attempt_id": "TEXT",
+            "failure_code": "TEXT",
+            "repair_reason": "TEXT",
+            "safety_status": "TEXT",
+            "execution_status": "TEXT",
+            "selected": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, definition in additions.items():
+            if column not in existing:
+                con.execute(f"ALTER TABLE sql_query_log ADD COLUMN {column} {definition}")

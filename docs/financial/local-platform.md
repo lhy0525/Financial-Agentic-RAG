@@ -24,11 +24,32 @@ financial_platform:
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
   upload_dir: "./data/local_platform_uploads"
+  text2sql_agent:
+    enable_lora_fallback: false
+    lora_endpoint: ""
+    enable_api_fallback: false
+    api_model: ""
+    api_endpoint: ""
+    api_key: ""
+    sql_examples_path: ""
+    sql_examples_top_k: 3
+    enable_empty_result_repair: false
+    max_repair_attempts: 2
 ```
 
 `prospectus_collection` is the shared local collection for browser uploads, bulk local PDF ingestion, readiness checks, and chat retrieval. Keep it stable unless you intentionally want a new local search corpus.
 
 Prospectus evidence is disabled by default. Set `prospectus_enabled: true` only when the configured collection has indexed chunks and the embedding/vector/BM25 stack is available. The platform still checks real readiness before enabling prospectus chat retrieval.
+
+Text2SQL Agent fallback is also disabled by default. The SQL route always tries the deterministic rule compiler first. When `enable_lora_fallback` is true and `lora_endpoint` is set, eligible rule failures can call a local SQL-LoRA HTTP endpoint as the next candidate source. API fallback remains behind `enable_api_fallback`, `api_endpoint`, and `api_model`, and empty-result repair only runs when `enable_empty_result_repair` is true. `sql_examples_path` can point to a JSON list of `{question, sql}` examples; the route attaches the top keyword matches to LoRA/API/repair context.
+
+The route metadata is emitted with SQL evidence and traces:
+
+- Source order: `rule -> lora -> api`
+- Repair triggers: unsafe SQL, execution errors, and configured empty-result repair
+- Stop rule: the first acceptable SQL evidence wins
+- Failure reporting: terminal packages include `final_failure_code`, `accepted_result_kind`, and fallback attempt metadata
+- Evaluation reporting: `FinancialEvalRunner` emits source breakdown, fallback lift, repair metrics, promotion gates, and case-level SQL route diagnostics
 
 Local upload readiness is reported separately from prospectus search readiness:
 

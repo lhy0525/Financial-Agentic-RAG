@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
 import json
 from pathlib import Path
@@ -8,8 +9,11 @@ import sqlite3
 from typing import Any
 
 from src.agentic.types import Evidence, EvidencePackage
+from src.financial_sql.agent_types import SQLCandidate, TextToSQLAgentConfig
 from src.financial_sql.entity_resolver import EntityResolver
+from src.financial_sql.fallback_policy import classify_terminal_outcome
 from src.financial_sql.formula_registry import FormulaDefinition, FormulaRegistry
+from src.financial_sql.generators import ApiSQLGenerator, LoraSQLGenerator, SQLExampleRetriever, SQLGenerator
 from src.financial_sql.schema_registry import FinancialSchemaRegistry
 from src.financial_sql.sql_executor import SQLiteQueryExecutor, SQLExecutionResult
 from src.financial_sql.sql_safety import SQLSafetyChecker
@@ -33,8 +37,20 @@ class TextToSQLEvidenceTool:
         db_path: str | Path,
         row_limit: int = 100,
         log_db_path: str | Path | None = None,
+        agent_config: TextToSQLAgentConfig | None = None,
+        fallback_generators: Sequence[SQLGenerator] | None = None,
     ) -> None:
         self.db_path = Path(db_path)
+        self.agent_config = agent_config or TextToSQLAgentConfig()
+        self.fallback_generators = (
+            list(fallback_generators)
+            if fallback_generators is not None
+            else self._default_fallback_generators(self.agent_config)
+        )
+        self.example_retriever = SQLExampleRetriever(
+            self.agent_config.sql_examples_path,
+            top_k=self.agent_config.sql_examples_top_k,
+        )
         self.registry = FinancialSchemaRegistry()
         self.formulas = FormulaRegistry()
         self.resolver = EntityResolver(self.db_path)
@@ -42,21 +58,90 @@ class TextToSQLEvidenceTool:
         self.executor = SQLiteQueryExecutor(self.db_path, row_cap=row_limit, log_db_path=log_db_path)
 
     def query(self, plan: Any, question: str) -> EvidencePackage:
+        fallback_attempts: list[dict[str, Any]] = []
+        route_events: list[dict[str, Any]] = []
+        candidate_count = 1
         compile_result = self._compile_with_repair(plan)
         if compile_result["status"] == "failed":
+            failure_metadata = {**compile_result, "final_failure_code": "compile_failed"}
+            if self._has_enabled_fallback():
+                return self._try_fallback_candidates(
+                    plan=plan,
+                    question=question,
+                    context={"rule_failure": failure_metadata},
+                    candidate_count=candidate_count,
+                    fallback_attempts=fallback_attempts,
+                    repair_attempts=compile_result.get("repair_attempts", 0),
+                    repair_errors=compile_result.get("repair_errors", []),
+                    route_events=route_events,
+                )
+            failure_metadata["sql_route_events"] = route_events
             return self._failed_package(
                 question=question,
                 error=compile_result["error"],
                 error_type=compile_result["error_type"],
-                metadata=compile_result,
+                metadata=failure_metadata,
             )
-        sql = compile_result["sql"]
-        query_metadata = compile_result["metadata"]
-        repair_attempts = compile_result["repair_attempts"]
-        repair_errors = compile_result["repair_errors"]
+        candidate = SQLCandidate(source="rule", sql=compile_result["sql"], metadata=compile_result["metadata"])
+        route_events.append({"event": "candidate_generated", "source": "rule"})
+        package = self._execute_candidate(
+            candidate=candidate,
+            question=question,
+            plan=plan,
+            repair_attempts=compile_result["repair_attempts"],
+            repair_errors=compile_result["repair_errors"],
+            candidate_count=candidate_count,
+            fallback_attempts=fallback_attempts,
+            route_events=route_events,
+        )
+        if not self._should_try_fallback(package):
+            return package
+        return self._try_fallback_candidates(
+            plan=plan,
+            question=question,
+            context={"rule_failure": package.metadata},
+            candidate_count=candidate_count,
+            fallback_attempts=fallback_attempts,
+            repair_attempts=compile_result["repair_attempts"],
+            repair_errors=compile_result["repair_errors"],
+            route_events=route_events,
+        )
 
+    def _execute_candidate(
+        self,
+        *,
+        candidate: SQLCandidate,
+        question: str,
+        plan: Any,
+        repair_attempts: int,
+        repair_errors: list[str],
+        candidate_count: int,
+        fallback_attempts: list[dict[str, Any]],
+        route_events: list[dict[str, Any]],
+    ) -> EvidencePackage:
+        sql = candidate.sql
+        query_metadata = candidate.metadata
+        route_metadata = {
+            "sql_source": candidate.source,
+            "candidate_count": candidate_count,
+            "fallback_attempts": list(fallback_attempts),
+        }
         safety = self.safety.check(sql)
+        route_events.append(
+            {
+                "event": "safety_check",
+                "source": candidate.source,
+                "allowed": safety.allowed,
+                "reason": safety.reason,
+            }
+        )
         if not safety.allowed:
+            outcome = classify_terminal_outcome(
+                status="failed",
+                task_family=self._get(plan, "task_type"),
+                failure_code="unsafe_sql",
+                empty_result_policy=self._empty_result_policy(),
+            )
             return EvidencePackage(
                 path="text_to_sql",
                 question=question,
@@ -69,11 +154,37 @@ class TextToSQLEvidenceTool:
                     "safety": safety.to_dict(),
                     "repair_attempts": repair_attempts,
                     "repair_errors": repair_errors,
+                    "final_failure_code": outcome.failure_code,
+                    "accepted_result_kind": outcome.accepted_result_kind,
+                    "fallback_eligibility_reason": outcome.fallback_eligibility_reason,
+                    "selected_reason": None,
+                    "sql_route_events": list(route_events),
+                    **route_metadata,
                     **query_metadata,
                 },
             )
 
-        result = self.executor.execute(safety.sql, question=question)
+        route_events.append({"event": "execution_started", "source": candidate.source})
+        result = self.executor.execute(
+            safety.sql,
+            question=question,
+            attempt_context={
+                "source": candidate.source,
+                "attempt_id": f"{candidate.source}-{candidate_count}",
+                "parent_attempt_id": query_metadata.get("parent_attempt_id"),
+                "failure_code": query_metadata.get("trigger_failure_code"),
+                "repair_reason": query_metadata.get("repair_reason"),
+                "safety_status": "allowed" if safety.allowed else "rejected",
+                "selected_statuses": ["success", "empty"],
+            },
+        )
+        failure_code = "execution_error" if result.status == "failed" else None
+        outcome = classify_terminal_outcome(
+            status=result.status,
+            task_family=self._get(plan, "task_type"),
+            failure_code=failure_code,
+            empty_result_policy=self._empty_result_policy(),
+        )
         metadata = {
             "status": result.status,
             "sql": safety.sql,
@@ -89,7 +200,27 @@ class TextToSQLEvidenceTool:
             "safety": safety.to_dict(),
             "repair_attempts": repair_attempts,
             "repair_errors": repair_errors,
+            "final_failure_code": outcome.failure_code,
+            "accepted_result_kind": outcome.accepted_result_kind,
+            "fallback_eligibility_reason": outcome.fallback_eligibility_reason,
+            "selected_reason": (
+                "first_acceptable_result"
+                if result.status in {"success", "empty"} and not outcome.should_fallback
+                else None
+            ),
+            **route_metadata,
         }
+        route_events.append(
+            {
+                "event": "execution_finished",
+                "source": candidate.source,
+                "status": result.status,
+                "failure_code": outcome.failure_code,
+            }
+        )
+        if metadata["selected_reason"]:
+            route_events.append({"event": "selected", "source": candidate.source, "reason": metadata["selected_reason"]})
+        metadata["sql_route_events"] = list(route_events)
         result_value_column = query_metadata.get("result_value_column")
         if result_value_column and result.rows:
             first_row = result.rows[0]
@@ -128,6 +259,155 @@ class TextToSQLEvidenceTool:
             evidences=[evidence],
             metadata={**metadata, "status": "success"},
         )
+
+    def _try_fallback_candidates(
+        self,
+        *,
+        plan: Any,
+        question: str,
+        context: dict[str, Any],
+        candidate_count: int,
+        fallback_attempts: list[dict[str, Any]],
+        repair_attempts: int,
+        repair_errors: list[str],
+        route_events: list[dict[str, Any]],
+    ) -> EvidencePackage:
+        context = self._fallback_context(plan, question, context)
+        for generator in self.fallback_generators:
+            source = str(getattr(generator, "source", "api"))
+            max_attempts = self.agent_config.max_repair_attempts if source == "repair" else 1
+            for source_attempt in range(max(1, max_attempts)):
+                candidate_count += 1
+                trigger_failure_code = (context.get("rule_failure") or {}).get("final_failure_code")
+                attempt: dict[str, Any] = {
+                    "source": source,
+                    "selected": False,
+                    "failure_code": trigger_failure_code,
+                    "attempt": source_attempt + 1,
+                }
+                fallback_attempts.append(attempt)
+                if not self._source_enabled(source):
+                    attempt.update({"status": "failed", "failure_code": "source_disabled"})
+                    continue
+                try:
+                    candidate = generator.generate(plan, question, context)
+                except Exception as exc:
+                    attempt.update({"status": "failed", "failure_code": "source_unavailable", "error": str(exc)})
+                    continue
+                if candidate is None:
+                    attempt.update({"status": "failed", "failure_code": "source_unavailable"})
+                    continue
+                route_events.append({"event": "candidate_generated", "source": source, "attempt": source_attempt + 1})
+                if source == "repair":
+                    route_events.append({"event": "repair_reexecuted", "source": source, "attempt": source_attempt + 1})
+                candidate = SQLCandidate(
+                    source=candidate.source,
+                    sql=candidate.sql,
+                    metadata={
+                        **candidate.metadata,
+                        "trigger_failure_code": trigger_failure_code,
+                        "parent_attempt_id": "rule-1",
+                        "repair_reason": trigger_failure_code if source == "repair" else None,
+                    },
+                )
+                package = self._execute_candidate(
+                    candidate=candidate,
+                    question=question,
+                    plan=plan,
+                    repair_attempts=repair_attempts + (source_attempt + 1 if source == "repair" else 0),
+                    repair_errors=repair_errors,
+                    candidate_count=candidate_count,
+                    fallback_attempts=fallback_attempts,
+                    route_events=route_events,
+                )
+                attempt.update(
+                    {
+                        "status": package.metadata.get("status"),
+                        "failure_code": package.metadata.get("final_failure_code") or attempt.get("failure_code"),
+                        "row_count": package.metadata.get("row_count"),
+                    }
+                )
+                if not self._should_try_fallback(package):
+                    attempt["selected"] = package.metadata.get("status") in {"success", "empty"}
+                    package.metadata["fallback_attempts"] = list(fallback_attempts)
+                    return package
+                context["rule_failure"] = package.metadata
+
+        return self._failed_package(
+            question=question,
+            error="All SQL candidates failed.",
+            error_type="all_candidates_failed",
+            metadata={
+                "final_failure_code": "all_candidates_failed",
+                "candidate_count": candidate_count,
+                "fallback_attempts": list(fallback_attempts),
+                "repair_attempts": repair_attempts,
+                "repair_errors": repair_errors,
+                "sql_source": None,
+                "sql_route_events": list(route_events),
+            },
+        )
+
+    def _should_try_fallback(self, package: EvidencePackage) -> bool:
+        if not self._has_enabled_fallback():
+            return False
+        outcome = classify_terminal_outcome(
+            status=str(package.metadata.get("status") or ""),
+            failure_code=package.metadata.get("final_failure_code"),
+            empty_result_policy=self._empty_result_policy(),
+        )
+        return outcome.should_fallback
+
+    def _has_enabled_fallback(self) -> bool:
+        return any(self._source_enabled(str(getattr(generator, "source", ""))) for generator in self.fallback_generators)
+
+    def _source_enabled(self, source: str) -> bool:
+        if source == "lora":
+            return self.agent_config.enable_lora_fallback
+        if source == "api":
+            return self.agent_config.enable_api_fallback
+        if source == "repair":
+            return True
+        return False
+
+    def _empty_result_policy(self) -> str:
+        return "repair" if self.agent_config.enable_empty_result_repair else "terminal"
+
+    def _default_fallback_generators(self, config: TextToSQLAgentConfig) -> list[SQLGenerator]:
+        generators: list[SQLGenerator] = []
+        if config.enable_lora_fallback and config.lora_endpoint:
+            generators.append(LoraSQLGenerator(config.lora_endpoint))
+        if config.enable_api_fallback and config.api_endpoint and config.api_model:
+            generators.append(
+                ApiSQLGenerator(
+                    endpoint=config.api_endpoint,
+                    model=config.api_model,
+                    api_key=config.api_key,
+                )
+            )
+        return generators
+
+    def _fallback_context(self, plan: Any, question: str, context: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **context,
+            "examples": self.example_retriever.retrieve(question),
+            "schema_hints": {
+                "tables": sorted(self.registry.tables),
+            },
+            "plan": self._plan_metadata(plan),
+        }
+
+    def _plan_metadata(self, plan: Any) -> dict[str, Any]:
+        if isinstance(plan, dict):
+            return dict(plan)
+        if hasattr(plan, "to_dict"):
+            return plan.to_dict()
+        return {
+            "task_type": self._get(plan, "task_type"),
+            "entities": self._get(plan, "entities", {}),
+            "time_scope": self._scope_to_dict(self._get(plan, "time_scope", {}) or {}),
+            "formula": self._get(plan, "formula"),
+        }
 
     def _compile_with_repair(self, plan: Any) -> dict[str, Any]:
         repair_errors: list[str] = []

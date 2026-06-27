@@ -102,6 +102,81 @@ class FakeAgent:
         }
 
 
+class SourceAwareAgent:
+    def answer(self, question):
+        source = "rule" if question == "rule" else "lora"
+        elapsed_ms = 25.0 if source == "rule" else 125.0
+        return {
+            "question_plan": {"route": "text_to_sql", "hybrid_mode": None, "entities": {}, "formula": None},
+            "verification_report": {"status": "pass"},
+            "answer": "answer",
+            "sources": [
+                {
+                    "evidence_id": f"sql-{source}",
+                    "evidence_type": "sql_result",
+                    "source_type": "db",
+                    "source": "bosera.db",
+                    "metadata": {
+                        "status": "success",
+                        "sql_source": source,
+                        "accepted_result_kind": "rows",
+                        "final_failure_code": None,
+                        "elapsed_ms": elapsed_ms,
+                        "safety": {"allowed": True},
+                        "rows": [{"value": 1}],
+                    },
+                }
+            ],
+            "trace": {
+                "tool_sequence": ["plan", "text_to_sql", "merge", "verify", "answer"],
+                "stages": [
+                    {
+                        "stage": "sql_evidence",
+                        "sql_source": source,
+                        "accepted_result_kind": "rows",
+                        "final_failure_code": None,
+                    }
+                ],
+            },
+        }
+
+
+class RouteMetricsAgent:
+    def answer(self, question):
+        fixtures = {
+            "rule-ok": ("rule", "success", None, 20.0, []),
+            "lora-ok": ("lora", "success", None, 50.0, [{"source": "lora", "selected": True}]),
+            "repair-ok": ("repair", "success", None, 75.0, [{"source": "repair", "selected": True}]),
+            "repair-failed": ("repair", "failed", "repair_exhausted", 80.0, [{"source": "repair", "selected": False}]),
+        }
+        source, status, failure_code, elapsed_ms, attempts = fixtures[question]
+        return {
+            "question_plan": {"route": "text_to_sql", "hybrid_mode": None, "entities": {}, "formula": None},
+            "verification_report": {"status": "pass" if status == "success" else "insufficient"},
+            "answer": "answer" if status == "success" else "",
+            "sources": [
+                {
+                    "evidence_id": f"sql-{question}",
+                    "evidence_type": "sql_result",
+                    "source_type": "db",
+                    "source": "bosera.db",
+                    "metadata": {
+                        "status": status,
+                        "sql_source": source,
+                        "accepted_result_kind": "rows" if status == "success" else None,
+                        "final_failure_code": failure_code,
+                        "elapsed_ms": elapsed_ms,
+                        "safety": {"allowed": True},
+                        "fallback_attempts": attempts,
+                        "repair_attempts": len([item for item in attempts if item["source"] == "repair"]),
+                        "rows": [{"value": 1}] if status == "success" else [],
+                    },
+                }
+            ],
+            "trace": {"tool_sequence": ["plan", "text_to_sql"]},
+        }
+
+
 def test_eval_runner_reports_financial_metrics_and_family_breakdowns():
     cases = [
         {
@@ -195,3 +270,37 @@ def test_eval_runner_reports_financial_metrics_and_family_breakdowns():
     assert result["families"]["prospectus table facts"]["verification_status_accuracy"] == 1.0
     assert result["families"]["fund scale"]["answer_formatting_accuracy"] == 1.0
     assert result["regressions"]["missing_raw_table"]["status_accuracy"] == 1.0
+
+
+def test_eval_runner_reports_sql_source_breakdown_and_case_diagnostics():
+    cases = [
+        {"id": "rule-case", "question": "rule", "expected_route": "text_to_sql"},
+        {"id": "lora-case", "question": "lora", "expected_route": "text_to_sql"},
+    ]
+
+    result = FinancialEvalRunner(agent=SourceAwareAgent()).run(cases)
+
+    assert result["sql_sources"]["rule"]["count"] == 1
+    assert result["sql_sources"]["lora"]["count"] == 1
+    assert result["sql_sources"]["lora"]["execution_success_rate"] == 1.0
+    assert result["case_results"][1]["actual"]["selected_sql_source"] == "lora"
+    assert result["case_results"][1]["actual"]["accepted_result_kind"] == "rows"
+    assert result["case_results"][1]["actual"]["final_failure_code"] is None
+
+
+def test_eval_runner_reports_fallback_lift_and_repair_metrics():
+    cases = [
+        {"id": "rule-ok", "question": "rule-ok", "task_family": "lookup"},
+        {"id": "lora-ok", "question": "lora-ok", "task_family": "lookup"},
+        {"id": "repair-ok", "question": "repair-ok", "task_family": "lookup"},
+        {"id": "repair-failed", "question": "repair-failed", "task_family": "lookup"},
+    ]
+
+    result = FinancialEvalRunner(agent=RouteMetricsAgent()).run(cases)
+
+    assert result["fallback_lift"]["fallback_success_count"] == 2
+    assert result["fallback_lift"]["families"]["lookup"]["fallback_success_count"] == 2
+    assert result["repair_metrics"]["count"] == 2
+    assert result["repair_metrics"]["execution_success_rate"] == 0.5
+    assert result["repair_metrics"]["retry_exhaustion_count"] == 1
+    assert result["repair_metrics"]["non_empty_result_rate"] == 0.5

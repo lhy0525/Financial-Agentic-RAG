@@ -13,13 +13,14 @@ class FakePlanner:
 
 
 class RecordingSQLTool:
-    def __init__(self, evidences: list[Evidence]) -> None:
+    def __init__(self, evidences: list[Evidence], metadata: dict | None = None) -> None:
         self.evidences = evidences
+        self.metadata = metadata or {}
         self.calls: list[tuple[QuestionPlan, str]] = []
 
     def query(self, plan: QuestionPlan, question: str) -> EvidencePackage:
         self.calls.append((plan, question))
-        return EvidencePackage("text_to_sql", question, self.evidences)
+        return EvidencePackage("text_to_sql", question, self.evidences, metadata=self.metadata)
 
 
 class RecordingProspectusTool:
@@ -312,3 +313,70 @@ def test_orchestrator_returns_partial_when_first_hybrid_step_has_no_dependency_e
     assert result["verification_report"]["status"] in {"partial", "insufficient"}
     assert "hybrid_dependency" in result["verification_report"]["missing_evidence"]
     assert result["trace"]["tool_sequence"] == ["plan", "text_to_sql", "merge", "verify", "answer"]
+
+
+def test_orchestrator_trace_preserves_sql_route_metadata():
+    sql_tool = RecordingSQLTool(
+        [],
+        metadata={
+            "status": "failed",
+            "sql_source": "repair",
+            "accepted_result_kind": None,
+            "final_failure_code": "all_candidates_failed",
+            "repair_attempts": 1,
+            "fallback_attempts": [{"source": "repair", "failure_code": "execution_error"}],
+            "sql_route_events": [
+                {"event": "candidate_generated", "source": "rule"},
+                {"event": "repair_reexecuted", "source": "repair"},
+            ],
+        },
+    )
+    orchestrator = FinancialOrchestrator(
+        planner=FakePlanner(_plan("text_to_sql")),
+        sql_tool=sql_tool,
+        prospectus_tool=None,
+    )
+
+    result = orchestrator.answer("question")
+
+    sql_stage = next(stage for stage in result["trace"]["stages"] if stage["stage"] == "sql_evidence")
+    assert sql_stage["sql_source"] == "repair"
+    assert sql_stage["accepted_result_kind"] is None
+    assert sql_stage["final_failure_code"] == "all_candidates_failed"
+    assert sql_stage["repair_attempts"] == 1
+    assert sql_stage["fallback_attempts"] == [{"source": "repair", "failure_code": "execution_error"}]
+    assert sql_stage["sql_route_events"] == [
+        {"event": "candidate_generated", "source": "rule"},
+        {"event": "repair_reexecuted", "source": "repair"},
+    ]
+
+
+def test_hybrid_trace_preserves_sql_route_metadata():
+    sql_tool = RecordingSQLTool(
+        [],
+        metadata={
+            "status": "failed",
+            "sql_source": "api",
+            "final_failure_code": "unsafe_sql",
+            "accepted_result_kind": None,
+            "fallback_attempts": [{"source": "api", "failure_code": "compile_failed"}],
+            "sql_route_events": [{"event": "candidate_generated", "source": "api"}],
+        },
+    )
+    prospectus_tool = RecordingProspectusTool([Evidence("txt-1", "text", "txt", "doc", "p.txt")])
+    plan = _plan(
+        "hybrid",
+        hybrid_mode="sql_first",
+        sub_questions=[
+            {"path": "text_to_sql", "question": "resolve stock"},
+            {"path": "pdf_rag", "question": "find disclosure"},
+        ],
+    )
+    orchestrator = FinancialOrchestrator(FakePlanner(plan), sql_tool, prospectus_tool)
+
+    result = orchestrator.answer("question")
+
+    sql_stage = next(stage for stage in result["trace"]["stages"] if stage["stage"] == "sql_evidence")
+    assert sql_stage["sql_source"] == "api"
+    assert sql_stage["final_failure_code"] == "unsafe_sql"
+    assert sql_stage["sql_route_events"] == [{"event": "candidate_generated", "source": "api"}]

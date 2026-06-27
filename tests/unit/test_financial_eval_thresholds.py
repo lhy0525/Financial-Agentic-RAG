@@ -14,6 +14,30 @@ class FailingAgent:
         }
 
 
+class SlowFallbackAgent:
+    def answer(self, question):
+        return {
+            "question_plan": {"route": "text_to_sql", "entities": {}, "formula": None},
+            "verification_report": {"status": "pass"},
+            "answer": "answer",
+            "sources": [
+                {
+                    "evidence_id": "sql-lora",
+                    "evidence_type": "sql_result",
+                    "source_type": "db",
+                    "source": "bosera.db",
+                    "metadata": {
+                        "status": "success",
+                        "sql_source": "lora",
+                        "elapsed_ms": 950.0,
+                        "accepted_result_kind": "rows",
+                    },
+                }
+            ],
+            "trace": {"tool_sequence": ["plan", "text_to_sql"]},
+        }
+
+
 def test_threshold_failure_reports_metric_and_case_id():
     cases = [
         {
@@ -92,3 +116,15 @@ def test_unavailable_data_cases_are_skipped_with_reason():
     assert result["skipped_cases"] == [
         {"id": "missing-db", "reason": "sqlite db unavailable"}
     ]
+
+
+def test_failed_fallback_latency_gate_reports_reason_and_case_ids():
+    cases = [{"id": "slow-lora", "question": "q", "expected_route": "text_to_sql"}]
+    thresholds = {"fallback_latency_budget_ms": 800.0}
+
+    result = FinancialEvalRunner(agent=SlowFallbackAgent(), thresholds=thresholds).run(cases)
+
+    assert result["passed"] is False
+    assert result["promotion_gates"]["latency_budget_ok"] is False
+    assert result["failed_thresholds"][0]["metric"] == "fallback_latency_budget_ms"
+    assert result["failed_thresholds"][0]["case_ids"] == ["slow-lora"]

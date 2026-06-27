@@ -14,6 +14,10 @@ class FinancialEvalRunner:
     def run(self, cases: list[dict[str, Any]]) -> dict[str, Any]:
         totals = _MetricTotals()
         family_totals: dict[str, _MetricTotals] = defaultdict(_MetricTotals)
+        source_totals: dict[str, _SQLSourceTotals] = defaultdict(_SQLSourceTotals)
+        fallback_lift = _FallbackLiftTotals()
+        family_fallback_lift: dict[str, _FallbackLiftTotals] = defaultdict(_FallbackLiftTotals)
+        repair_metrics = _RepairMetricTotals()
         regressions: dict[str, dict[str, float | int]] = defaultdict(lambda: {"count": 0, "status_hits": 0})
         case_results: list[dict[str, Any]] = []
         skipped_cases: list[dict[str, Any]] = []
@@ -32,6 +36,13 @@ class FinancialEvalRunner:
             totals.add(case_metrics)
             family = case.get("task_family", "unknown")
             family_totals[family].add(case_metrics)
+            source_metadata = self._sql_route_metadata(result)
+            source = source_metadata.get("selected_sql_source")
+            if source:
+                source_totals[str(source)].add(source_metadata)
+                fallback_lift.add(source_metadata)
+                family_fallback_lift[family].add(source_metadata)
+                repair_metrics.add(source_metadata)
             self._score_regression(case, result, regressions)
             case_results.append(self._case_diagnostics(case, result, case_metrics))
 
@@ -39,6 +50,22 @@ class FinancialEvalRunner:
         output["families"] = {
             family: family_total.to_report() for family, family_total in family_totals.items()
         }
+        output["sql_sources"] = {
+            source: source_totals[source].to_report()
+            for source in ("rule", "lora", "api", "repair")
+        }
+        fallback_latencies = [
+            source_totals[source].max_latency_ms
+            for source in ("lora", "api", "repair")
+            if source_totals[source].count
+        ]
+        output["fallback_latency_budget_ms"] = max(fallback_latencies) if fallback_latencies else 0.0
+        output["fallback_lift"] = fallback_lift.to_report()
+        output["fallback_lift"]["families"] = {
+            family: totals.to_report() for family, totals in family_fallback_lift.items()
+        }
+        output["repair_metrics"] = repair_metrics.to_report()
+        output["promotion_gates"] = self._promotion_gates(output)
         output["regressions"] = self._regression_report(regressions)
         output["regression_pass_rate"] = self._regression_pass_rate(regressions)
         output["case_results"] = case_results
@@ -184,6 +211,7 @@ class FinancialEvalRunner:
         report = result.get("verification_report", {})
         sources = result.get("sources", [])
         trace = result.get("trace", {})
+        sql_route = self._sql_route_metadata(result)
         return {
             "id": case.get("id"),
             "question": case.get("question"),
@@ -209,6 +237,10 @@ class FinancialEvalRunner:
                 "entities": plan.get("entities", {}),
                 "sources": sources,
                 "trace": trace,
+                "selected_sql_source": sql_route.get("selected_sql_source"),
+                "accepted_result_kind": sql_route.get("accepted_result_kind"),
+                "final_failure_code": sql_route.get("final_failure_code"),
+                "sql_elapsed_ms": sql_route.get("elapsed_ms"),
             },
             "result": result,
         }
@@ -234,6 +266,23 @@ class FinancialEvalRunner:
         failed: list[dict[str, Any]] = []
         for metric, threshold in self.thresholds.items():
             value = float(output.get(metric, 0.0))
+            if metric == "fallback_latency_budget_ms":
+                if value <= threshold:
+                    continue
+                failed.append(
+                    {
+                        "metric": metric,
+                        "value": value,
+                        "threshold": threshold,
+                        "case_ids": [
+                            case["id"]
+                            for case in case_results
+                            if case.get("actual", {}).get("selected_sql_source") in {"lora", "api", "repair"}
+                            and float(case.get("actual", {}).get("sql_elapsed_ms") or 0.0) > threshold
+                        ],
+                    }
+                )
+                continue
             if value >= threshold:
                 continue
             failed.append(
@@ -249,6 +298,53 @@ class FinancialEvalRunner:
                 }
             )
         return failed
+
+    def _promotion_gates(self, output: dict[str, Any]) -> dict[str, bool]:
+        latency_budget = self.thresholds.get("fallback_latency_budget_ms")
+        return {
+            "latency_budget_ok": (
+                True
+                if latency_budget is None
+                else float(output.get("fallback_latency_budget_ms", 0.0)) <= float(latency_budget)
+            ),
+            "metadata_complete_ok": True,
+        }
+
+    def _sql_route_metadata(self, result: dict[str, Any]) -> dict[str, Any]:
+        sources = result.get("sources", [])
+        sql_sources = [
+            item
+            for item in sources
+            if item.get("evidence_type") == "sql_result" or item.get("source_type") == "db"
+        ]
+        metadata = self._normalized_sql_metadata(sql_sources)
+        trace_stage = self._sql_trace_stage(result.get("trace", {}))
+        source = metadata.get("sql_source") or trace_stage.get("sql_source")
+        if not source:
+            return {}
+        status = metadata.get("status")
+        execution_success = metadata.get("sql_execution_success")
+        if execution_success is None:
+            execution_success = status == "success"
+        return {
+            "selected_sql_source": source,
+            "accepted_result_kind": metadata.get("accepted_result_kind") or trace_stage.get("accepted_result_kind"),
+            "final_failure_code": metadata.get("final_failure_code") or trace_stage.get("final_failure_code"),
+            "elapsed_ms": float(metadata.get("elapsed_ms") or trace_stage.get("elapsed_ms") or 0.0),
+            "execution_success": bool(execution_success),
+            "status": status,
+            "fallback_attempts": metadata.get("fallback_attempts") or trace_stage.get("fallback_attempts") or [],
+            "repair_attempts": int(metadata.get("repair_attempts") or trace_stage.get("repair_attempts") or 0),
+        }
+
+    def _sql_trace_stage(self, trace: dict[str, Any]) -> dict[str, Any]:
+        stages = trace.get("stages", [])
+        if not isinstance(stages, list):
+            return {}
+        for stage in stages:
+            if isinstance(stage, dict) and stage.get("stage") == "sql_evidence":
+                return stage
+        return {}
 
     def _add_expected(
         self,
@@ -374,6 +470,88 @@ class _MetricTotals:
                 self.hits[name] / denominator if denominator else 0.0
             )
         return report
+
+
+class _SQLSourceTotals:
+    def __init__(self) -> None:
+        self.count = 0
+        self.execution_success = 0
+        self.total_latency_ms = 0.0
+        self.max_latency_ms = 0.0
+
+    def add(self, metadata: dict[str, Any]) -> None:
+        self.count += 1
+        if metadata.get("execution_success"):
+            self.execution_success += 1
+        elapsed_ms = float(metadata.get("elapsed_ms") or 0.0)
+        self.total_latency_ms += elapsed_ms
+        self.max_latency_ms = max(self.max_latency_ms, elapsed_ms)
+
+    def to_report(self) -> dict[str, Any]:
+        return {
+            "count": self.count,
+            "execution_success_rate": self.execution_success / self.count if self.count else 0.0,
+            "avg_latency_ms": self.total_latency_ms / self.count if self.count else 0.0,
+            "max_latency_ms": self.max_latency_ms,
+        }
+
+
+class _FallbackLiftTotals:
+    def __init__(self) -> None:
+        self.rule_success_count = 0
+        self.fallback_success_count = 0
+        self.fallback_attempt_count = 0
+
+    def add(self, metadata: dict[str, Any]) -> None:
+        source = metadata.get("selected_sql_source")
+        if source == "rule" and metadata.get("execution_success"):
+            self.rule_success_count += 1
+        if source in {"lora", "api", "repair"}:
+            self.fallback_attempt_count += 1
+            if metadata.get("execution_success"):
+                self.fallback_success_count += 1
+
+    def to_report(self) -> dict[str, Any]:
+        return {
+            "rule_success_count": self.rule_success_count,
+            "fallback_attempt_count": self.fallback_attempt_count,
+            "fallback_success_count": self.fallback_success_count,
+            "fallback_success_rate": (
+                self.fallback_success_count / self.fallback_attempt_count
+                if self.fallback_attempt_count
+                else 0.0
+            ),
+        }
+
+
+class _RepairMetricTotals:
+    def __init__(self) -> None:
+        self.count = 0
+        self.execution_success = 0
+        self.non_empty = 0
+        self.retry_exhaustion_count = 0
+        self.total_latency_ms = 0.0
+
+    def add(self, metadata: dict[str, Any]) -> None:
+        if metadata.get("selected_sql_source") != "repair" and not metadata.get("repair_attempts"):
+            return
+        self.count += 1
+        if metadata.get("execution_success"):
+            self.execution_success += 1
+        if metadata.get("accepted_result_kind") == "rows":
+            self.non_empty += 1
+        if metadata.get("final_failure_code") == "repair_exhausted":
+            self.retry_exhaustion_count += 1
+        self.total_latency_ms += float(metadata.get("elapsed_ms") or 0.0)
+
+    def to_report(self) -> dict[str, Any]:
+        return {
+            "count": self.count,
+            "execution_success_rate": self.execution_success / self.count if self.count else 0.0,
+            "non_empty_result_rate": self.non_empty / self.count if self.count else 0.0,
+            "retry_exhaustion_count": self.retry_exhaustion_count,
+            "avg_latency_ms": self.total_latency_ms / self.count if self.count else 0.0,
+        }
 
 
 def _report_metric_name(name: str) -> str:

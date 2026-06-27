@@ -2,6 +2,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from src.agentic.types import AnswerConstraints, QuestionPlan, TimeScope
+from src.financial_sql.agent_types import SQLCandidate, TextToSQLAgentConfig
 from src.financial_sql.text_to_sql_tool import TextToSQLEvidenceTool
 
 
@@ -11,6 +12,41 @@ class SimplePlan:
     entities: dict
     time_scope: dict = field(default_factory=dict)
     formula: str | None = None
+
+
+class StubSQLGenerator:
+    def __init__(self, source, sql=None):
+        self.source = source
+        self.sql = sql
+        self.calls = 0
+
+    def generate(self, plan, question, context):
+        self.calls += 1
+        if self.sql is None:
+            return None
+        return SQLCandidate(source=self.source, sql=self.sql, metadata={"stub": self.source})
+
+
+class ContextCapturingGenerator(StubSQLGenerator):
+    def __init__(self, source, sql=None):
+        super().__init__(source, sql)
+        self.contexts = []
+
+    def generate(self, plan, question, context):
+        self.contexts.append(context)
+        return super().generate(plan, question, context)
+
+
+class SequenceSQLGenerator:
+    def __init__(self, source, sql_values):
+        self.source = source
+        self.sql_values = list(sql_values)
+        self.calls = 0
+
+    def generate(self, plan, question, context):
+        value = self.sql_values[min(self.calls, len(self.sql_values) - 1)]
+        self.calls += 1
+        return SQLCandidate(source=self.source, sql=value, metadata={"sequence_call": self.calls})
 
 
 def _seed_financial_db(path):
@@ -392,3 +428,200 @@ def test_unsafe_sql_returns_failed_package_without_execution(tmp_path):
     assert package.metadata["status"] == "failed"
     assert package.evidences == []
     assert "rejected" in package.metadata["error"]
+
+
+def test_rule_success_stops_before_lora_and_api(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    lora = StubSQLGenerator("lora", "SELECT 2 AS value")
+    api = StubSQLGenerator("api", "SELECT 3 AS value")
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(enable_lora_fallback=True, enable_api_fallback=True),
+        fallback_generators=[lora, api],
+    )
+    plan = SimplePlan(task_type="raw_sql", entities={"sql": "SELECT 1 AS value"})
+
+    package = tool.query(plan, "point lookup")
+
+    assert package.metadata["status"] == "success"
+    assert package.metadata["sql_source"] == "rule"
+    assert package.metadata["candidate_count"] == 1
+    assert lora.calls == 0
+    assert api.calls == 0
+
+
+def test_tool_builds_lora_generator_from_config(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(
+            enable_lora_fallback=True,
+            lora_endpoint="http://127.0.0.1:8888/SQL",
+        ),
+    )
+
+    assert [generator.source for generator in tool.fallback_generators] == ["lora"]
+
+
+def test_tool_builds_api_generator_from_config(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(
+            enable_api_fallback=True,
+            api_model="qwen-plus",
+            api_endpoint="http://127.0.0.1:9999/v1/sql",
+        ),
+    )
+
+    assert [generator.source for generator in tool.fallback_generators] == ["api"]
+
+
+def test_fallback_context_includes_retrieved_sql_examples(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    examples_file = tmp_path / "examples.json"
+    examples_file.write_text(
+        '[{"question": "unsupported task", "sql": "SELECT 1 AS example_sql"}]',
+        encoding="utf-8",
+    )
+    lora = ContextCapturingGenerator("lora", "SELECT 1 AS value")
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(
+            enable_lora_fallback=True,
+            sql_examples_path=examples_file,
+            sql_examples_top_k=1,
+        ),
+        fallback_generators=[lora],
+    )
+    plan = SimplePlan(task_type="unsupported_task", entities={})
+
+    package = tool.query(plan, "unsupported task")
+
+    assert package.metadata["status"] == "success"
+    assert lora.contexts[0]["examples"] == [
+        {"question": "unsupported task", "sql": "SELECT 1 AS example_sql"}
+    ]
+
+
+def test_terminal_empty_result_does_not_trigger_fallback(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    lora = StubSQLGenerator("lora", "SELECT 1 AS value")
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(enable_lora_fallback=True),
+        fallback_generators=[lora],
+    )
+    plan = SimplePlan(
+        task_type="raw_sql",
+        entities={"sql": 'SELECT * FROM "A股票日行情表" WHERE 1 = 0'},
+    )
+
+    package = tool.query(plan, "empty point lookup")
+
+    assert package.metadata["status"] == "empty"
+    assert package.metadata["accepted_result_kind"] == "empty"
+    assert package.metadata["fallback_attempts"] == []
+    assert package.metadata["sql_source"] == "rule"
+    assert lora.calls == 0
+
+
+def test_all_candidates_failed_returns_stable_failure_code(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    lora = StubSQLGenerator("lora")
+    api = StubSQLGenerator("api")
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(enable_lora_fallback=True, enable_api_fallback=True),
+        fallback_generators=[lora, api],
+    )
+    plan = SimplePlan(task_type="unsupported_task", entities={})
+
+    package = tool.query(plan, "unsupported")
+
+    assert package.metadata["status"] == "failed"
+    assert package.metadata["final_failure_code"] == "all_candidates_failed"
+    assert package.metadata["candidate_count"] == 3
+    assert [attempt["source"] for attempt in package.metadata["fallback_attempts"]] == ["lora", "api"]
+
+
+def test_execution_error_triggers_repair_then_reexecution(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    repair = StubSQLGenerator("repair", 'SELECT "股票代码" FROM "A股票日行情表" LIMIT 1')
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        fallback_generators=[repair],
+    )
+    plan = SimplePlan(
+        task_type="raw_sql",
+        entities={"sql": 'SELECT missing_column FROM "A股票日行情表"'},
+    )
+
+    package = tool.query(plan, "repair missing column")
+
+    assert package.metadata["status"] == "success"
+    assert package.metadata["sql_source"] == "repair"
+    assert package.metadata["fallback_attempts"][0]["source"] == "repair"
+    assert package.metadata["fallback_attempts"][0]["failure_code"] == "execution_error"
+
+
+def test_repair_retries_unsafe_repair_until_limit(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    repair = SequenceSQLGenerator(
+        "repair",
+        [
+            "DROP TABLE items",
+            'SELECT "股票代码" FROM "A股票日行情表" LIMIT 1',
+        ],
+    )
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(max_repair_attempts=2),
+        fallback_generators=[repair],
+    )
+    plan = SimplePlan(
+        task_type="raw_sql",
+        entities={"sql": 'SELECT missing_column FROM "A股票日行情表"'},
+    )
+
+    package = tool.query(plan, "repair retry")
+
+    assert package.metadata["status"] == "success"
+    assert package.metadata["sql_source"] == "repair"
+    assert repair.calls == 2
+    assert package.metadata["repair_attempts"] == 2
+    assert package.metadata["fallback_attempts"][0]["status"] == "failed"
+    assert package.metadata["fallback_attempts"][0]["failure_code"] == "unsafe_sql"
+    assert package.metadata["fallback_attempts"][1]["selected"] is True
+
+
+def test_empty_result_repair_runs_when_enabled(tmp_path):
+    db_path = tmp_path / "finance.db"
+    _seed_financial_db(db_path)
+    repair = StubSQLGenerator("repair", 'SELECT "股票代码" FROM "A股票日行情表" LIMIT 1')
+    tool = TextToSQLEvidenceTool(
+        db_path,
+        agent_config=TextToSQLAgentConfig(enable_empty_result_repair=True, max_repair_attempts=1),
+        fallback_generators=[repair],
+    )
+    plan = SimplePlan(
+        task_type="raw_sql",
+        entities={"sql": 'SELECT * FROM "A股票日行情表" WHERE 1 = 0'},
+    )
+
+    package = tool.query(plan, "empty repair")
+
+    assert package.metadata["status"] == "success"
+    assert package.metadata["sql_source"] == "repair"
+    assert package.metadata["fallback_attempts"][0]["failure_code"] == "empty_result"
+    assert package.metadata["selected_reason"] == "first_acceptable_result"

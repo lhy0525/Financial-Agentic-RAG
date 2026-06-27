@@ -62,3 +62,67 @@ def test_executor_logs_query_attempts(tmp_path):
     ).fetchone()
     con.close()
     assert row == ("question", "SELECT * FROM items WHERE id = 1", "success", 1)
+
+
+def test_executor_logs_attempt_context(tmp_path):
+    db_path = tmp_path / "data.db"
+    log_path = tmp_path / "queries.db"
+    _seed_db(db_path)
+
+    result = SQLiteQueryExecutor(db_path, log_db_path=log_path).execute(
+        "SELECT * FROM items WHERE id = 1",
+        question="question",
+        attempt_context={
+            "source": "rule",
+            "attempt_id": "attempt-1",
+            "parent_attempt_id": None,
+            "failure_code": None,
+            "repair_reason": None,
+            "safety_status": "allowed",
+            "execution_status": "success",
+            "selected": True,
+        },
+    )
+
+    assert result.status == "success"
+    con = sqlite3.connect(log_path)
+    con.row_factory = sqlite3.Row
+    row = con.execute(
+        """
+        SELECT source, attempt_id, parent_attempt_id, failure_code,
+               repair_reason, safety_status, execution_status, selected
+        FROM sql_query_log
+        """
+    ).fetchone()
+    con.close()
+    assert dict(row) == {
+        "source": "rule",
+        "attempt_id": "attempt-1",
+        "parent_attempt_id": None,
+        "failure_code": None,
+        "repair_reason": None,
+        "safety_status": "allowed",
+        "execution_status": "success",
+        "selected": 1,
+    }
+
+
+def test_executor_marks_selected_from_success_status(tmp_path):
+    db_path = tmp_path / "data.db"
+    log_path = tmp_path / "queries.db"
+    _seed_db(db_path)
+
+    SQLiteQueryExecutor(db_path, log_db_path=log_path).execute(
+        "SELECT * FROM items WHERE id = 1",
+        question="question",
+        attempt_context={
+            "source": "rule",
+            "attempt_id": "rule-1",
+            "selected_statuses": ["success", "empty"],
+        },
+    )
+
+    con = sqlite3.connect(log_path)
+    selected = con.execute("SELECT selected FROM sql_query_log").fetchone()[0]
+    con.close()
+    assert selected == 1
