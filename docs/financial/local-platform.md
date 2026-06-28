@@ -12,9 +12,11 @@ The backend resolves the SQLite database path in this order:
 
 Copy `config/settings.example.yaml` to `config/settings.yaml` when you want file-based configuration. Environment variables win over the YAML value.
 
+For a repo-local single-folder setup, place the shared financial dataset under `data/datasets/bs_challenge_financial_14b_dataset/` and keep the platform SQLite entry in `config/settings.yaml` at `../data/sqlite/financial_demo.sqlite`. The dataset finder prefers the repo-local `data/datasets` location before falling back to sibling directories.
+
 ```yaml
 financial_platform:
-  sql_db_path: "./data/financial_demo.sqlite"
+  sql_db_path: "../data/sqlite/financial_demo.sqlite"
   host: "127.0.0.1"
   port: 8010
   cors_origins:
@@ -23,7 +25,7 @@ financial_platform:
   prospectus_enabled: false
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
-  upload_dir: "./data/local_platform_uploads"
+  upload_dir: "../data/local_platform_uploads"
   text2sql_agent:
     enable_lora_fallback: false
     lora_endpoint: ""
@@ -151,3 +153,6 @@ Phase 2 now includes a narrow local-only upload/index workflow:
 6. Wire a real `ProspectusEvidenceTool` only when local index readiness passes.
 
 This platform should not add OAuth, JWT, cloud upload, multi-user isolation, Pinecone, MongoDB, Supabase, Redis, or reference-project-specific service claims.
+
+
+

@@ -67,7 +67,7 @@ observability:
 
 financial_platform:
   # FINANCIAL_DEMO_DB_PATH overrides this value when set.
-  sql_db_path: "./data/financial_demo.sqlite"
+  sql_db_path: "../data/sqlite/financial_demo.sqlite"
   host: "127.0.0.1"
   port: 8010
   cors_origins:
@@ -76,7 +76,7 @@ financial_platform:
   prospectus_enabled: false
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
-  upload_dir: "./data/local_platform_uploads"
+  upload_dir: "../data/local_platform_uploads"
   text2sql_agent:
     enable_lora_fallback: false
     lora_endpoint: ""
@@ -100,3 +100,4 @@ ingestion:
 
   metadata_enricher:
     use_llm: false
+

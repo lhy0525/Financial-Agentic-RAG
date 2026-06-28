@@ -97,8 +97,9 @@ def test_service_constructs_sql_first_orchestrator_from_existing_components(tmp_
         pass
 
     class FakeSQLTool:
-        def __init__(self, path):
+        def __init__(self, path, **kwargs):
             constructed["sql_path"] = path
+            constructed["sql_kwargs"] = kwargs
 
     class FakeOrchestrator:
         def __init__(self, planner, sql_tool, prospectus_tool):
@@ -123,6 +124,7 @@ def test_service_constructs_sql_first_orchestrator_from_existing_components(tmp_
 
     assert response["answer"] == "answered question"
     assert constructed["sql_path"] == db_path
+    assert "agent_config" in constructed["sql_kwargs"]
     assert isinstance(constructed["planner"], FakePlanner)
     assert isinstance(constructed["sql_tool"], FakeSQLTool)
     assert constructed["prospectus_tool"] is None

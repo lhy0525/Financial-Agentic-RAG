@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 DATASET_DIR_NAME = "bs_challenge_financial_14b_dataset"
+REPO_DATASET_RELATIVE_PATH = Path("data") / "datasets" / DATASET_DIR_NAME
 
 
 @dataclass(frozen=True)
@@ -62,8 +63,10 @@ def find_financial_dataset(start: str | Path | None = None) -> FinancialDatasetP
 
     candidates: list[Path] = []
     for parent in [current, *current.parents]:
+        candidates.append(parent / REPO_DATASET_RELATIVE_PATH)
         candidates.append(parent / DATASET_DIR_NAME)
-        candidates.append(parent.parent / DATASET_DIR_NAME)
+        if parent.parent != parent:
+            candidates.append(parent.parent / DATASET_DIR_NAME)
 
     seen: set[Path] = set()
     for candidate in candidates:
@@ -75,4 +78,4 @@ def find_financial_dataset(start: str | Path | None = None) -> FinancialDatasetP
         if paths.available or candidate.exists():
             return paths
 
-    return FinancialDatasetPaths.from_root(current / DATASET_DIR_NAME)
+    return FinancialDatasetPaths.from_root(current / REPO_DATASET_RELATIVE_PATH)

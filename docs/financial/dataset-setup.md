@@ -8,22 +8,24 @@ financial Agentic RAG boundary work.
 The local challenge dataset is expected at:
 
 ```text
-../bs_challenge_financial_14b_dataset
+data/datasets/bs_challenge_financial_14b_dataset
 ```
 
-relative to `MODULAR-RAG-MCP-SERVER`, or at a parent/sibling path discoverable by
-`src.financial_dataset.paths.find_financial_dataset()`.
+relative to the `financial-agentic-rag` repository root. The dataset
+finder in `src.financial_dataset.paths.find_financial_dataset()` prefers this
+repo-local path first, then falls back to parent/sibling layouts for older
+workspaces.
 
 The SQLite DB is discovered from:
 
 ```text
-../bs_challenge_financial_14b_dataset/dataset/*.db
+data/datasets/bs_challenge_financial_14b_dataset/dataset/*.db
 ```
 
 You can also pass a DB explicitly to the SQL smoke CLI:
 
 ```powershell
-python scripts/financial_query.py "000637 latest industry" --db "../bs_challenge_financial_14b_dataset/dataset/<db-file>.db" --json
+python scripts/financial_query.py "000637 latest industry" --db "data/datasets/bs_challenge_financial_14b_dataset/dataset/<db-file>.db" --json
 ```
 
 If the dataset is unavailable, dataset-aware tests should skip with an explicit
@@ -34,7 +36,7 @@ reason rather than failing with an opaque file-not-found error.
 Use `ProspectusTxtLoader` to verify TXT files can be read from:
 
 ```text
-../bs_challenge_financial_14b_dataset/pdf_txt_file
+data/datasets/bs_challenge_financial_14b_dataset/pdf_txt_file
 ```
 
 The loader preserves table placeholders such as `<|TABLE_0001_0000.xlsx|>` in
@@ -71,7 +73,7 @@ pytest tests/integration/test_financial_sql_dataset.py -v --basetemp .pytest-tmp
 For a manual query smoke, pass the discovered DB to:
 
 ```powershell
-python scripts/financial_query.py "000637 latest industry" --db "../bs_challenge_financial_14b_dataset/dataset/<db-file>.db" --json
+python scripts/financial_query.py "000637 latest industry" --db "data/datasets/bs_challenge_financial_14b_dataset/dataset/<db-file>.db" --json
 ```
 
 A healthy SQL evidence response includes a `question_plan`, one or more SQL
@@ -99,8 +101,9 @@ The JSON output is printed to stdout. Stable top-level fields include `passed`,
 
 ## Common Failures
 
-- Missing dataset directory: place `bs_challenge_financial_14b_dataset` beside or
-  above the repo, or pass explicit fixture paths where supported.
+- Missing dataset directory: place `bs_challenge_financial_14b_dataset` under
+  `data/datasets/` inside this repository. Older sibling-directory layouts may
+  still work through dataset discovery, but the consolidated setup is repo-local.
 - Missing SQLite DB: verify `dataset/*.db` exists and the process has read
   permission.
 - Wrong collection: for MCP retrieval, pass the collection containing indexed

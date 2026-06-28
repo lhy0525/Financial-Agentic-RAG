@@ -18,11 +18,14 @@ This repository is packaged as the standalone Financial Agentic RAG development 
 ## Repository Layout
 
 ```text
-config/                 Configuration examples and prompts
+config/                  Configuration examples and prompts
 docs/financial/          Financial Agentic RAG documentation
+openspec/                Formal product specs and archived changes
 frontend/                React/Vite local demo platform
-scripts/                 CLI helpers, ingestion, and local startup scripts
+scripts/                 CLI helpers, ingestion, local startup, and LoRA utilities
 src/                     Backend, RAG, MCP, and financial pipeline code
+data/                    Repo-local datasets, SQLite files, LoRA assets, and retrieval stores
+logs/                    Runtime traces and local logs
 tests/                   Unit and integration tests
 DEV_SPEC.md              Original development specification
 CONTEXT.md               Project context and handoff notes
@@ -46,16 +49,24 @@ Example:
 
 ```yaml
 financial_platform:
-  sql_db_path: "./data/financial_demo.sqlite"
+  sql_db_path: "../data/sqlite/financial_demo.sqlite"
   host: "127.0.0.1"
   port: 8010
   prospectus_enabled: false
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
-  upload_dir: "./data/local_platform_uploads"
+  upload_dir: "../data/local_platform_uploads"
 ```
 
 Local runtime files such as `config/settings.yaml`, uploaded files, SQLite databases, vector stores, logs, and `data/` are intentionally ignored by Git.
+
+The repo-local data layout used by the consolidated setup is:
+
+- `data/sqlite/financial_demo.sqlite`
+- `data/datasets/bs_challenge_financial_14b_dataset/`
+- `data/lora/train/`, `data/lora/eval/`, and `data/lora/sql_examples/`
+- `data/db/chroma/` and `data/db/bm25/`
+- `logs/traces.jsonl`
 
 ## Backend Setup
 
@@ -117,6 +128,7 @@ Prospectus evidence remains local-only. This project does not add OAuth, JWT, cl
 Start here:
 
 - `docs/financial/README.md`
+- `openspec/specs/`
 - `docs/financial/local-platform.md`
 - `docs/financial/financial-agentic-rag-design.md`
 - `docs/codebase-map.md`

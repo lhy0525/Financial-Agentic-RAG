@@ -59,6 +59,13 @@ def _require_str(data: Dict[str, Any], key: str, path: str) -> str:
     return value
 
 
+def _require_string_value(data: Dict[str, Any], key: str, path: str) -> str:
+    value = _require_value(data, key, path)
+    if not isinstance(value, str):
+        raise SettingsError(f"Expected string for field: {path}.{key}")
+    return value
+
+
 def _require_int(data: Dict[str, Any], key: str, path: str) -> int:
     value = _require_value(data, key, path)
     if not isinstance(value, int):
@@ -229,6 +236,12 @@ class Settings:
                 base_url=vision_llm.get("base_url"),
             )
 
+        rerank_enabled = _require_bool(rerank, "enabled", "rerank")
+        rerank_provider = _require_str(rerank, "provider", "rerank")
+        rerank_model = _require_string_value(rerank, "model", "rerank")
+        if rerank_enabled and rerank_provider.lower() != "none" and not rerank_model.strip():
+            raise SettingsError("Expected non-empty string for field: rerank.model")
+
         settings = cls(
             llm=LLMSettings(
                 provider=_require_str(llm, "provider", "llm"),
@@ -263,9 +276,9 @@ class Settings:
                 rrf_k=_require_int(retrieval, "rrf_k", "retrieval"),
             ),
             rerank=RerankSettings(
-                enabled=_require_bool(rerank, "enabled", "rerank"),
-                provider=_require_str(rerank, "provider", "rerank"),
-                model=_require_str(rerank, "model", "rerank"),
+                enabled=rerank_enabled,
+                provider=rerank_provider,
+                model=rerank_model,
                 top_k=_require_int(rerank, "top_k", "rerank"),
             ),
             evaluation=EvaluationSettings(

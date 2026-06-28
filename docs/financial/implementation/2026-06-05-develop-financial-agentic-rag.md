@@ -1,10 +1,12 @@
 # Develop Financial Agentic RAG Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Historical note:** This implementation plan was written before the financial project was consolidated into `financial-agentic-rag` as a standalone repository. References to `MODULAR-RAG-MCP-SERVER/...` should now be read as paths rooted at the current repository root.
 
 **Goal:** Build the spec-driven financial Agentic RAG layer that plans finance questions, produces SQL and prospectus evidence, verifies results, and evaluates dataset task families.
 
-**Architecture:** Additive modules live under `MODULAR-RAG-MCP-SERVER/src` and reuse existing RAG retrieval components instead of rewriting MCP tools. The flow is `QuestionPlan -> SQL Evidence / Prospectus Evidence -> Orchestrator -> Merger -> Verifier -> FinalAnswer`, with evaluation runners measuring each stage.
+**Architecture:** Additive modules live under `src` in this repository and reuse existing RAG retrieval components instead of rewriting MCP tools. The flow is `QuestionPlan -> SQL Evidence / Prospectus Evidence -> Orchestrator -> Merger -> Verifier -> FinalAnswer`, with evaluation runners measuring each stage.
 
 **Tech Stack:** Python 3.10+, dataclasses, sqlite3, pytest, existing Chroma/BM25 retrieval, existing trace collector, OpenSpec artifacts in `openspec/changes/develop-financial-agentic-rag`.
 
@@ -12,12 +14,12 @@
 
 ## Ground Rules
 
-- Run implementation commands from `D:\workspace\financial-agentic-rag\MODULAR-RAG-MCP-SERVER`.
+- Run implementation commands from the `financial-agentic-rag` repository root.
 - Keep all code additive unless a task explicitly modifies an existing file.
 - Do not change existing MCP tool schemas in the first pass.
 - Use deterministic rules before LLM calls for planner, formula, SQL safety, and verifier behavior.
 - After each task, run the listed focused tests before committing.
-- Parent repo root is not a git repository; code commits, if used, must run from `MODULAR-RAG-MCP-SERVER`.
+- Use the current repository as the product boundary for commands, docs, tests, and commits.
 
 ## File Structure
 
