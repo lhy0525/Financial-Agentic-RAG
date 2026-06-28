@@ -73,7 +73,7 @@ financial_platform:
   cors_origins:
     - "http://localhost:5173"
     - "http://127.0.0.1:5173"
-  prospectus_enabled: false
+  prospectus_enabled: true
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
   upload_dir: "../data/local_platform_uploads"

@@ -283,7 +283,7 @@ def test_service_uploads_txt_prospectus_saves_and_reports_not_indexed(tmp_path):
     assert response["vector_count"] == 2
     assert response["indexed"] is True
     assert response["searchable"] is True
-    assert response["prospectus_enabled"] is False
+    assert response["prospectus_enabled"] is True
     assert index_service.index_calls == [
         {
             "file_path": saved_path,

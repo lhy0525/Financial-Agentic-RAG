@@ -52,7 +52,7 @@ financial_platform:
   sql_db_path: "../data/sqlite/financial_demo.sqlite"
   host: "127.0.0.1"
   port: 8010
-  prospectus_enabled: false
+  prospectus_enabled: true
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
   upload_dir: "../data/local_platform_uploads"
@@ -111,6 +111,8 @@ npm run build
 ## Prospectus Upload And Indexing
 
 The local platform supports one-file-at-a-time browser upload for PDF/TXT prospectus evidence. Uploaded files are saved locally, parsed, indexed into the configured collection, and reported with honest statuses such as `indexed_searchable`, `already_indexed`, or `index_failed`.
+
+PDF uploads use the full local ingestion pipeline: text loading, image extraction, chunk transforms, dense vectors, BM25, and image storage registration. LLM refinement, metadata enrichment, and image captions still follow `config/settings.yaml`; the upload path does not force external model calls. TXT uploads remain on the narrow text indexing path.
 
 For many PDFs, use the local bulk ingestion workflow instead of repeated browser uploads:
 

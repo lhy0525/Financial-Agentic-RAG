@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+import pytest
+
 from src.prospectus_evidence.element_docstore import ElementDocstore, RawElementPayload
 from src.prospectus_evidence.evidence_tool import ProspectusEvidenceTool
 
@@ -93,3 +95,62 @@ def test_evidence_tool_preserves_uploaded_index_metadata():
     assert evidence.metadata["collection"] == "prospectus_uploads"
     assert evidence.metadata["local_origin"] == "ui_upload"
     assert evidence.metadata["document_id"] == "doc_uploaded"
+
+
+@pytest.mark.parametrize(
+    ("text", "metadata", "expected_type", "expected_modalities"),
+    [
+        (
+            "Plain text disclosure.",
+            {"source_path": "a.pdf", "page": 1},
+            "text",
+            ["text"],
+        ),
+        (
+            "[IMAGE: img-1]",
+            {
+                "source_path": "a.pdf",
+                "page_num": 2,
+                "image_refs": ["img-1"],
+                "images": [{"id": "img-1", "path": "data/images/prospectus_uploads/img-1.png", "page": 2}],
+                "image_captions": [{"id": "img-1", "caption": "Revenue chart"}],
+            },
+            "image",
+            ["image"],
+        ),
+        (
+            "募集资金用途 <|TABLE_0001_0000.xlsx|> 详见上表",
+            {"source_path": "a.pdf", "page": 3, "element_type": "table"},
+            "table",
+            ["text", "table"],
+        ),
+        (
+            "See [IMAGE: img-2] and <|TABLE_0002_0000.xlsx|>",
+            {
+                "source_path": "a.pdf",
+                "page": 4,
+                "image_refs": ["img-2"],
+                "images": [{"id": "img-2", "path": "data/images/prospectus_uploads/img-2.png", "page": 4}],
+                "element_type": "table",
+            },
+            "multimodal",
+            ["text", "table", "image"],
+        ),
+    ],
+)
+def test_evidence_tool_maps_modalities_without_splitting_hits(
+    text,
+    metadata,
+    expected_type,
+    expected_modalities,
+):
+    search = FakeSearch([Result("chunk-mm", text, 0.8, metadata)])
+
+    package = ProspectusEvidenceTool(search).query("multi-modal question", top_k=1)
+
+    assert len(package.evidences) == 1
+    evidence = package.evidences[0]
+    assert evidence.evidence_type == expected_type
+    assert evidence.metadata["modalities"] == expected_modalities
+    assert evidence.metadata["page_num"] == metadata.get("page_num")
+    assert evidence.metadata["source_path"] == "a.pdf"

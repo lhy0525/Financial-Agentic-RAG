@@ -54,6 +54,11 @@ class ProspectusEvidenceTool:
         text = getattr(result, "text", "")
         placeholders = re.findall(r"<\|(TABLE_[^|]+)\|>", text)
         element_id = metadata.get("element_id")
+        page = metadata.get("page", metadata.get("page_num"))
+        image_refs = self._image_refs(text, metadata)
+        images = metadata.get("images") if isinstance(metadata.get("images"), list) else []
+        image_captions = self._image_captions(metadata.get("image_captions"))
+        modalities = self._modalities(text, placeholders, metadata, image_refs)
         raw_payload_available = bool(metadata.get("raw_payload_available"))
         if element_id and self.element_docstore is not None:
             raw_payload_available = self.element_docstore.get(element_id) is not None
@@ -62,27 +67,84 @@ class ProspectusEvidenceTool:
             "chunk_index": metadata.get("chunk_index"),
             "element_id": element_id,
             "element_type": metadata.get("element_type"),
-            "page": metadata.get("page"),
+            "page": page,
+            "page_num": metadata.get("page_num"),
             "section": metadata.get("section"),
             "company_name": metadata.get("company_name"),
             "disclosure_family": metadata.get("disclosure_family"),
+            "modalities": modalities,
             "table_placeholders": placeholders,
             "raw_payload_available": raw_payload_available,
             "raw_table_unavailable": bool(placeholders) and not raw_payload_available,
+            "image_refs": image_refs,
+            "images": images,
+            "image_captions": image_captions,
         }
         evidence_metadata.update(
             {key: value for key, value in metadata.items() if key not in evidence_metadata}
         )
         return Evidence(
             evidence_id=f"prospectus-{index}",
-            evidence_type="table" if placeholders or metadata.get("element_type") == "table" else "text",
+            evidence_type=self._evidence_type(modalities),
             source_type="txt",
             content=text,
             source=metadata.get("source_path", ""),
             score=getattr(result, "score", None),
-            page=metadata.get("page"),
+            page=page,
             metadata=evidence_metadata,
         )
+
+    def _modalities(
+        self,
+        text: str,
+        placeholders: list[str],
+        metadata: dict,
+        image_refs: list[str],
+    ) -> list[str]:
+        modalities: list[str] = []
+        text_without_refs = re.sub(r"\[IMAGE:\s*[^\]]+\]", "", text)
+        text_without_refs = re.sub(r"<\|TABLE_[^|]+\|>", "", text_without_refs).strip()
+        if text_without_refs:
+            modalities.append("text")
+        if placeholders or metadata.get("element_type") == "table" or metadata.get("table_placeholders"):
+            modalities.append("table")
+        if image_refs:
+            modalities.append("image")
+        return modalities or ["text"]
+
+    def _evidence_type(self, modalities: list[str]) -> str:
+        if "image" in modalities and len(modalities) > 1:
+            return "multimodal"
+        if "image" in modalities:
+            return "image"
+        if "table" in modalities:
+            return "table"
+        return "text"
+
+    def _image_refs(self, text: str, metadata: dict) -> list[str]:
+        refs: list[str] = []
+        raw_refs = metadata.get("image_refs")
+        if isinstance(raw_refs, list):
+            refs.extend(str(ref) for ref in raw_refs if ref)
+        images = metadata.get("images")
+        if isinstance(images, list):
+            refs.extend(
+                str(image.get("id"))
+                for image in images
+                if isinstance(image, dict) and image.get("id")
+            )
+        refs.extend(match.strip() for match in re.findall(r"\[IMAGE:\s*([^\]]+)\]", text))
+        return list(dict.fromkeys(refs))
+
+    def _image_captions(self, raw_captions) -> list[dict]:
+        if isinstance(raw_captions, list):
+            return [caption for caption in raw_captions if isinstance(caption, dict)]
+        if isinstance(raw_captions, dict):
+            return [
+                {"id": str(image_id), "caption": caption}
+                for image_id, caption in raw_captions.items()
+            ]
+        return []
 
     def _hit_metrics(self, evidences: list[Evidence], expected: dict) -> dict:
         negative_reasons = []

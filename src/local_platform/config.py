@@ -22,7 +22,7 @@ class PlatformConfig:
     cors_origins: list[str] = field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
     )
-    prospectus_enabled: bool = False
+    prospectus_enabled: bool = True
     upload_dir: Path | None = None
     prospectus_indexing_enabled: bool = True
     prospectus_collection: str = "prospectus_uploads"
@@ -81,7 +81,7 @@ def resolve_platform_config(settings_path: str | Path | None = None) -> Platform
         host=host,
         port=port,
         cors_origins=[str(origin) for origin in cors_origins],
-        prospectus_enabled=bool(platform.get("prospectus_enabled", False)),
+        prospectus_enabled=_as_bool(platform.get("prospectus_enabled"), default=True),
         upload_dir=upload_dir,
         prospectus_indexing_enabled=bool(platform.get("prospectus_indexing_enabled", True)),
         prospectus_collection=prospectus_collection,

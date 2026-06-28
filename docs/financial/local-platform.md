@@ -22,7 +22,7 @@ financial_platform:
   cors_origins:
     - "http://localhost:5173"
     - "http://127.0.0.1:5173"
-  prospectus_enabled: false
+  prospectus_enabled: true
   prospectus_indexing_enabled: true
   prospectus_collection: "prospectus_uploads"
   upload_dir: "../data/local_platform_uploads"
@@ -41,7 +41,7 @@ financial_platform:
 
 `prospectus_collection` is the shared local collection for browser uploads, bulk local PDF ingestion, readiness checks, and chat retrieval. Keep it stable unless you intentionally want a new local search corpus.
 
-Prospectus evidence is disabled by default. Set `prospectus_enabled: true` only when the configured collection has indexed chunks and the embedding/vector/BM25 stack is available. The platform still checks real readiness before enabling prospectus chat retrieval.
+Prospectus evidence is enabled by default in configuration, but actual chat retrieval is still gated by readiness. The configured collection must have indexed chunks and the embedding/vector/BM25 stack must be available before the platform wires a real `ProspectusEvidenceTool`.
 
 Text2SQL Agent fallback is also disabled by default. The SQL route always tries the deterministic rule compiler first. When `enable_lora_fallback` is true and `lora_endpoint` is set, eligible rule failures can call a local SQL-LoRA HTTP endpoint as the next candidate source. API fallback remains behind `enable_api_fallback`, `api_endpoint`, and `api_model`, and empty-result repair only runs when `enable_empty_result_repair` is true. `sql_examples_path` can point to a JSON list of `{question, sql}` examples; the route attaches the top keyword matches to LoRA/API/repair context.
 
@@ -106,6 +106,8 @@ Browser upload is intended for one local PDF/TXT at a time. `POST /api/prospectu
 - `already_indexed`: the same document is already indexed in the same collection.
 - `index_failed`: the file was saved and parsed, but embedding/vector/BM25 indexing failed.
 
+PDF uploads run the full existing `IngestionPipeline` with chunk transforms and image extraction enabled. The response includes `chunk_count`, `vector_count`, `image_count`, `transform_enabled`, and `image_extraction_enabled` so the UI can report which path ran. LLM and vision steps still obey `settings.yaml`; if they are disabled or unavailable, ingestion continues with text/image metadata where possible. TXT uploads remain on the existing text-only indexing path.
+
 Failures in prospectus indexing do not make SQL-first chat unavailable.
 
 ## Bulk Local PDF Directories
@@ -143,13 +145,13 @@ Existing SQL chat remains available when the SQLite database is valid. Re-enable
 
 Phase 1 ships the SQL-first API, no-login React shell, local history, architecture docs entry, verification status, trace/evidence rendering, and honest local upload metadata.
 
-Phase 2 now includes a narrow local-only upload/index workflow:
+Phase 2 now includes a local-only upload/index workflow:
 
 1. Accept local PDF/TXT files through `POST /api/prospectus/upload`.
 2. Save files to the configured local upload directory.
-3. Parse text with existing local loaders.
-4. Index chunks into local vector/BM25 stores.
-5. Report parse/index/search status and readable failures through platform metadata and the upload endpoint.
+3. Parse TXT with the text loader and PDF with the full ingestion pipeline.
+4. Index chunks into local vector/BM25 stores and register extracted PDF images.
+5. Report parse/index/search status, image count, transform flags, and readable failures through platform metadata and the upload endpoint.
 6. Wire a real `ProspectusEvidenceTool` only when local index readiness passes.
 
 This platform should not add OAuth, JWT, cloud upload, multi-user isolation, Pinecone, MongoDB, Supabase, Redis, or reference-project-specific service claims.

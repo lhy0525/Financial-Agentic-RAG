@@ -90,6 +90,7 @@ def test_platform_config_has_prospectus_indexing_defaults(tmp_path, monkeypatch)
 
     config = resolve_platform_config(settings_path=tmp_path / "absent.yaml")
 
+    assert config.prospectus_enabled is True
     assert config.prospectus_collection == "prospectus_uploads"
     assert config.prospectus_indexing_enabled is True
 
